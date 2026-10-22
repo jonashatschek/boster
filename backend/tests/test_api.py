@@ -180,3 +180,19 @@ def test_real_report_end_to_end(client):
     assert {s["value"] for s in area["reported"]["sources"]} == {26_688, 21_311}
     # Debt per m² has a five-year history.
     assert len(series(overview, "debt_per_sqm_total_area")["values"]) == 5
+
+
+def test_startup_adds_columns_missing_from_an_older_database(tmp_path):
+    import sqlite3
+
+    from app.config import Settings
+    from app.main import create_app
+
+    database = tmp_path / "boster.db"
+    with sqlite3.connect(database) as connection:  # A properties table from before fee_changes existed.
+        connection.execute("CREATE TABLE properties (id INTEGER PRIMARY KEY, retrieval_status VARCHAR(20), "
+                           "field_sources JSON, created_at DATETIME, updated_at DATETIME)")
+    create_app(Settings(data_directory=tmp_path))
+    with sqlite3.connect(database) as connection:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(properties)")}
+    assert {"fee_changes", "address", "asking_price"} <= columns

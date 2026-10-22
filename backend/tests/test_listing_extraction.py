@@ -120,3 +120,87 @@ def test_html_scripts_are_ignored():
 )
 def test_cooperative_name_normalization_keeps_distinguishing_words(name, normalized):
     assert normalize_cooperative_name(name) == normalized
+
+
+# --- Real listings for the same apartment on Booli and Hemnet -----------------------------
+
+from tests.real_listings import BOOLI_RUSTHALLARVAGEN, HEMNET_RUSTHALLARVAGEN  # noqa: E402
+
+SAME_FACTS = {
+    "address": "Rusthållarvägen 151",
+    "neighborhood": "Bagarmossen",
+    "asking_price": 1_650_000,
+    "living_area": 27,
+    "rooms": 1,
+    "monthly_fee": 3_348,
+    "construction_year": 1954,
+    "cooperative_name": "BRF Gästfriheten",
+}
+
+
+@pytest.mark.parametrize("text", [BOOLI_RUSTHALLARVAGEN, HEMNET_RUSTHALLARVAGEN], ids=["booli", "hemnet"])
+def test_real_listings_give_the_same_facts(text):
+    facts = values(extract_from_text(text))
+    for name, expected in SAME_FACTS.items():
+        assert facts[name] == expected, name
+
+
+def test_booli_sentences_and_location_line():
+    facts = values(extract_from_text(BOOLI_RUSTHALLARVAGEN))
+    assert facts["floor"] == "3 av 3"  # "Den ligger på våning 3 av 3".
+    assert facts["municipality"] == "Stockholm"  # "Lägenhet · Bagarmossen · Stockholm".
+    assert "description" not in facts  # Booli's pasted text has no agent description.
+
+
+def test_hemnet_no_elevator_is_not_read_as_elevator():
+    facts = values(extract_from_text(HEMNET_RUSTHALLARVAGEN))
+    assert facts["floor"] == "3 av 3, hiss finns ej"
+    assert facts["elevator"] is False
+
+
+def test_hemnet_description_starts_at_the_first_sentence_and_keeps_paragraphs():
+    description = values(extract_from_text(HEMNET_RUSTHALLARVAGEN))["description"]
+    assert description.startswith("Välkommen till en ljus")
+    assert "Tunnelbanan ligger" in description
+    assert "\n\n" in description
+
+
+def test_french_balcony_in_description_is_not_a_balcony():
+    assert "balcony" not in values(extract_from_text(HEMNET_RUSTHALLARVAGEN))
+
+
+def test_fee_includes_from_sentence():
+    facts = values(extract_from_text(HEMNET_RUSTHALLARVAGEN))
+    assert facts["fee_includes"].startswith("värme, vatten samt bredband")
+
+
+def test_contact_label_is_not_taken_as_address():
+    facts = values(extract_from_text("Adress:\nMobil:\nE-post:\n"))
+    assert "address" not in facts
+
+
+def test_planned_fee_changes():
+    text = "Kommande avgiftsförändringar:\nUnder 2026 höjs avgiften med 10 procent och under 2027 med 5 procent.\n"
+    assert values(extract_from_text(text))["fee_changes"].startswith("Under 2026 höjs avgiften med 10 procent")
+
+
+def test_cooperative_name_from_link_text_is_trimmed():
+    facts = extract_from_text("Dokument\nBrf Gästfriheten - Årsredovisning 2024\nStadgar\n")
+    assert facts.fields["cooperative_name"].value == "Brf Gästfriheten"
+    assert "Kontrollera" in facts.fields["cooperative_name"].note
+
+
+def test_agent_address_in_structured_data_is_not_the_apartment():
+    html = """<script type="application/ld+json">
+    {"@type": "RealEstateListing", "product": {"@type": "Product",
+      "seller": {"@type": "RealEstateAgent", "address": {"@type": "PostalAddress", "streetAddress": "Mäklargatan 1"}},
+      "offers": {"@type": "Offer", "price": "1650000", "priceCurrency": "SEK"},
+      "isRelatedTo": {"@type": "Residence", "address": {"@type": "PostalAddress", "streetAddress": "Rusthållarvägen 151"},
+                      "floorSize": {"@type": "QuantitativeValue", "value": "27"}, "numberOfRooms": "1", "yearBuilt": 1954}}}
+    </script>"""
+    facts, _ = extract_from_html(html)
+    found = values(facts)
+    assert found["address"] == "Rusthållarvägen 151"
+    assert found["asking_price"] == 1_650_000
+    assert found["living_area"] == 27
+    assert found["construction_year"] == 1954

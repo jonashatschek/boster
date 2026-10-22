@@ -323,6 +323,7 @@ class PropertyUpdate(BaseModel):
     asking_price: float | None = Field(default=None, gt=0)
     monthly_fee: float | None = Field(default=None, ge=0)
     fee_includes: str | None = Field(default=None, max_length=1000)
+    fee_changes: str | None = Field(default=None, max_length=1000)
     construction_year: int | None = Field(default=None, ge=1500, le=2100)
     energy_class: str | None = Field(default=None, pattern=r"^[A-G]$")
     listing_date: date | None = None

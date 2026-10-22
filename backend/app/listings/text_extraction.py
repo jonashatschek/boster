@@ -41,17 +41,19 @@ class ListingFacts:
 # Field labels as they appear on Hemnet, Booli and agents' sites. Matched at the start of a
 # line, case-insensitively, optionally followed by ":".
 _LABELS: dict[str, str] = {
-    "asking_price": r"utgångspris|begärt pris|pris",
+    "asking_price": r"utgångspris|utropspris|begärt pris|pris",
     "living_area": r"boarea|boyta|bostadsarea|storlek|yta",
     "rooms": r"antal rum|rum",
     "floor": r"våning|våningsplan|plan",
     "elevator": r"hiss",
     "balcony": r"balkong|balkong/uteplats|uteplats/balkong|uteplats|terrass",
     "monthly_fee": r"månadsavgift|avgift/månad|avgift",
-    "fee_includes": r"i avgiften ingår|avgiften inkluderar|ingår i avgiften",
+    "fee_includes": r"i avgiften ingår|i månadsavgiften ingår|avgiften inkluderar|ingår i avgiften",
+    "fee_changes": r"kommande avgiftsförändringar|avgiftsförändringar|avgiftsförändring|planerade avgiftshöjningar",
     "construction_year": r"byggår|byggnadsår|byggt",
     "energy_class": r"energiklass|energiprestanda",
-    "cooperative_name": r"bostadsrättsförening|förening|brf",
+    # "Brf X" lines are handled by the name pattern below, which keeps the "Brf" prefix.
+    "cooperative_name": r"bostadsrättsförening|förening",
     "municipality": r"kommun",
     "neighborhood": r"område|stadsdel",
     "listing_date": r"publicerad|inlagd|upplagd|annonsdatum",
@@ -64,6 +66,23 @@ _LABEL_LINE = {
 # A label must be followed by its value, not by more prose: "Förening" is a label,
 # "Föreningen har nyligen renoverat ..." is not.
 _MAX_VALUE_LENGTH = 120
+_MAX_VALUE_LENGTH_BY_FIELD = {"fee_changes": 400, "fee_includes": 250}
+# "Mobil:" or "E-post:" on the line after "Adress:" is the next label, not a value.
+_LOOKS_LIKE_LABEL = re.compile(r"^[\wåäöÅÄÖ /()-]{1,30}:$")
+
+# Sentences used instead of labels, e.g. on Booli: "Den ligger på våning 3 av 3".
+_SENTENCES: list[tuple[str, re.Pattern]] = [
+    ("floor", re.compile(r"^den ligger på våning (?P<value>.{1,40})$", re.IGNORECASE)),
+    ("cooperative_name", re.compile(r"^föreningen heter (?P<value>.{3,120})$", re.IGNORECASE)),
+]
+# "Lägenhet · Bagarmossen · Stockholm" under the address on Booli.
+_BOOLI_LOCATION = re.compile(r"^(?:lägenhet|bostadsrätt|radhus|villa|parhus|kedjehus)\s*·\s*(?P<area>[^·]{2,60})\s*·\s*"
+                             r"(?P<municipality>[^·]{2,60})$", re.IGNORECASE)
+# A cooperative name anywhere in the text: "Brf Gästfriheten", "HSB Brf Toppsockret".
+_COOPERATIVE_NAME = re.compile(
+    r"(?<![\wåäö])((?:HSB |Riksbyggens )?(?:Brf|BRF|Bostadsrättsföreningen|Bostadsrättsförening)\s+"
+    r"[A-ZÅÄÖ][\wåäöÅÄÖé-]*(?:\s+(?:i\s+[A-ZÅÄÖ][\wåäö]+|\d{1,3}(?![\d-])|[A-ZÅÄÖ][\wåäöÅÄÖé-]*))?)"
+)
 
 # Smallest plausible values; anything below is another number on the same line.
 _MIN_PRICE = 100_000
@@ -94,13 +113,22 @@ def extract_from_text(text: str) -> ListingFacts:
             rest = match["rest"].strip()
             # The value is on the same line, or (Hemnet's layout) on the next one.
             value_text = rest if rest else (lines[index + 1] if index + 1 < len(lines) else "")
-            if not value_text or len(value_text) > _MAX_VALUE_LENGTH or _is_label(value_text):
+            value_text = value_text.lstrip(": ").strip()  # "Månadsavgift" / ": 3 348 kr/månad".
+            max_length = _MAX_VALUE_LENGTH_BY_FIELD.get(name, _MAX_VALUE_LENGTH)
+            if (not value_text or len(value_text) > max_length or _is_label(value_text)
+                    or _LOOKS_LIKE_LABEL.match(value_text)):
                 continue
             excerpt = f"{line} {value_text}" if not rest else line
             _parse_field(facts, name, value_text, excerpt)
             break
 
+    for line in lines:
+        for name, pattern in _SENTENCES:
+            match = pattern.match(line)
+            if match:
+                _parse_field(facts, name, match["value"], line)
     _find_address_and_area(facts, lines)
+    _find_cooperative_name(facts, lines)
     _find_unlabelled_price(facts, lines)
     _find_description(facts, text)
     return facts
@@ -129,7 +157,9 @@ def _parse_field(facts: ListingFacts, name: str, value_text: str, excerpt: str) 
             facts.set(name, float(match.group(1).replace(",", ".")), excerpt, method)
     elif name == "floor":
         facts.set(name, value_text[:40], excerpt, method)
-        elevator = _yes_no_phrase(lowered, r"hiss finns|med hiss", r"ingen hiss|hiss saknas|utan hiss")
+        # The negative phrases are checked first: "hiss finns ej" contains "hiss finns".
+        elevator = _yes_no_phrase(lowered, r"hiss finns|med hiss",
+                                  r"hiss finns ej|hiss finns inte|ingen hiss|hiss saknas|utan hiss")
         facts.set("elevator", elevator, excerpt, method)
     elif name in ("elevator", "balcony"):
         answer = _yes_no(lowered)
@@ -143,7 +173,7 @@ def _parse_field(facts: ListingFacts, name: str, value_text: str, excerpt: str) 
         if "år" in lowered and "mån" not in lowered:  # "Driftkostnad 4 800 kr/år" style.
             return
         facts.set(name, _parse_amount(value_text, minimum=_MIN_MONTHLY_FEE), excerpt, method)
-    elif name == "fee_includes":
+    elif name in ("fee_includes", "fee_changes"):
         facts.set(name, value_text, excerpt, method)
     elif name == "construction_year":
         match = re.search(r"\b(1[6-9]\d{2}|20\d{2})\b", value_text)
@@ -190,7 +220,8 @@ def _yes_no_phrase(text: str, yes_pattern: str, no_pattern: str) -> bool | None:
 
 
 def _clean_cooperative_name(text: str) -> str | None:
-    name = re.sub(r"\b(visa|läs mer|om) (föreningen|förening).*$", "", text, flags=re.IGNORECASE).strip(" ,.-")
+    name = re.sub(r"\b(visa|läs mer|om) (föreningen|förening).*$", "", text, flags=re.IGNORECASE)
+    name = re.split(r"\s+[-–]\s+", name)[0].strip(" ,.-")  # "Brf X - Årsredovisning 2024".
     if len(name) < 3 or not re.search(r"[A-Za-zÅÄÖåäö]", name):
         return None
     return name[:120]
@@ -213,14 +244,26 @@ def _parse_date(text: str) -> date | None:
 
 
 def _find_address_and_area(facts: ListingFacts, lines: list[str]) -> None:
-    """Listings start with the address, often followed by "Area, X kommun"."""
-    for index, line in enumerate(lines[:40]):
+    """Listings start with the address, followed by "Area, X kommun" or "Lägenhet · Area · City"."""
+    for line in lines[:40]:
         if "address" not in facts.fields and _ADDRESS.match(line) and len(line) < 80:
             facts.set("address", line, line, "text_pattern")
-        match = _MUNICIPALITY_LINE.match(line)
+        match = _MUNICIPALITY_LINE.match(line) or _BOOLI_LOCATION.match(line)
         if match:
             facts.set("neighborhood", match["area"].strip(), line, "text_pattern")
             facts.set("municipality", match["municipality"].strip(), line, "text_pattern")
+
+
+def _find_cooperative_name(facts: ListingFacts, lines: list[str]) -> None:
+    """When no label names the cooperative, use the first "Brf X" in the text."""
+    if "cooperative_name" in facts.fields:
+        return
+    for line in lines:
+        match = _COOPERATIVE_NAME.search(line)
+        if match:
+            facts.set("cooperative_name", _clean_cooperative_name(match.group(1)), line, "text_pattern",
+                      note="Föreningens namn hittades i löptexten, inte vid en etikett. Kontrollera.")
+            return
 
 
 def _find_unlabelled_price(facts: ListingFacts, lines: list[str]) -> None:
@@ -235,12 +278,28 @@ def _find_unlabelled_price(facts: ListingFacts, lines: list[str]) -> None:
 
 
 def _find_description(facts: ListingFacts, text: str) -> None:
-    """The agent's description: the longest run of prose in the listing."""
-    paragraphs = [re.sub(r"\s+", " ", p).strip() for p in re.split(r"\n\s*\n", text)]
-    prose = [p for p in paragraphs if len(p) > 200 and p.count(".") >= 2]
-    if not prose:
-        lines = [_clean_line(line) for line in text.splitlines()]
-        prose = [line for line in lines if len(line) > 200 and line.count(".") >= 2]
-    if prose:
-        description = max(prose, key=len)
-        facts.set("description", description[:8000], description[:200], "text_pattern")
+    """The agent's description: the longest run of consecutive prose paragraphs."""
+    paragraphs = [_clean_line(_drop_leading_fragments(p)) for p in re.split(r"\n\s*\n", text)]
+    runs: list[list[str]] = [[]]
+    for paragraph in paragraphs:
+        if _is_prose(paragraph):
+            runs[-1].append(paragraph)
+        elif runs[-1]:
+            runs.append([])
+    best = max(runs, key=lambda run: sum(len(p) for p in run))
+    if sum(len(p) for p in best) > 200:
+        description = "\n\n".join(best)
+        facts.set("description", description[:8000], best[0][:200], "text_pattern")
+
+
+def _drop_leading_fragments(paragraph: str) -> str:
+    """Remove labels and buttons ("Pris/m²", "Premium") directly above the first sentence."""
+    lines = paragraph.strip().splitlines()
+    while len(lines) > 1 and not (len(lines[0]) > 40 and lines[0].count(" ") >= 6):
+        lines.pop(0)
+    return "\n".join(lines)
+
+
+def _is_prose(paragraph: str) -> bool:
+    """Running text, as opposed to labels, values and buttons."""
+    return len(paragraph) > 60 and paragraph.count(" ") >= 8 and paragraph.endswith((".", "!", "?", ")"))

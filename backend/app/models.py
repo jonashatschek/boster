@@ -129,6 +129,7 @@ class Property(Base):
     asking_price: Mapped[float | None] = mapped_column(Float)
     monthly_fee: Mapped[float | None] = mapped_column(Float)
     fee_includes: Mapped[str | None] = mapped_column(Text)
+    fee_changes: Mapped[str | None] = mapped_column(Text)  # Announced fee increases, as stated.
     construction_year: Mapped[int | None] = mapped_column(Integer)
     energy_class: Mapped[str | None] = mapped_column(String(2))
     description: Mapped[str | None] = mapped_column(Text)

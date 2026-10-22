@@ -84,12 +84,21 @@ def extract_from_html(html: str) -> tuple[ListingFacts, str]:
     return facts, visible_text
 
 
+# Keys that lead from a listing to the apartment and its offer. Keys such as "seller"
+# and "employee" are deliberately not followed: they describe the agent, whose office
+# address must not be mistaken for the apartment's.
+_NESTED_KEYS = ("@graph", "mainEntity", "itemOffered", "offers", "containsPlace", "product", "isRelatedTo", "about")
+# Types that describe the apartment itself.
+_RESIDENCE_TYPES = {"Residence", "Apartment", "House", "SingleFamilyResidence", "Accommodation", "Place",
+                    "ApartmentComplex", "Product", "RealEstateListing"}
+
+
 def _flatten(data: object) -> list[dict]:
     if isinstance(data, list):
         return [item for element in data for item in _flatten(element)]
     if isinstance(data, dict):
         items = [data]
-        for key in ("@graph", "mainEntity", "itemOffered", "offers", "containsPlace"):
+        for key in _NESTED_KEYS:
             if key in data:
                 items += _flatten(data[key])
         return items
@@ -101,6 +110,12 @@ def _read_structured(facts: ListingFacts, item: dict) -> None:
     types = [types] if isinstance(types, str) else types
     excerpt = f"Strukturerad data ({', '.join(types) or 'okänd typ'})"
 
+    if "Offer" in types and str(item.get("priceCurrency", "SEK")).upper() == "SEK":
+        price = _number(item.get("price"))
+        facts.set("asking_price", price if price and price >= 100_000 else None, excerpt, _STRUCTURED)
+    if not _RESIDENCE_TYPES.intersection(types):
+        return
+
     address = item.get("address")
     if isinstance(address, dict):
         facts.set("address", _text(address.get("streetAddress")), excerpt, _STRUCTURED)
@@ -110,9 +125,9 @@ def _read_structured(facts: ListingFacts, item: dict) -> None:
         facts.set("living_area", _number(floor_size.get("value")), excerpt, _STRUCTURED)
     rooms = item.get("numberOfRooms")
     facts.set("rooms", _number(rooms.get("value") if isinstance(rooms, dict) else rooms), excerpt, _STRUCTURED)
-    if "Offer" in types and str(item.get("priceCurrency", "SEK")).upper() == "SEK":
-        price = _number(item.get("price"))
-        facts.set("asking_price", price if price and price >= 100_000 else None, excerpt, _STRUCTURED)
+    year_built = _number(item.get("yearBuilt"))
+    facts.set("construction_year", int(year_built) if year_built and 1500 < year_built < 2100 else None,
+              excerpt, _STRUCTURED)
     facts.set("description", _text(item.get("description"), limit=8000), excerpt, _STRUCTURED)
     facts.set("title", _text(item.get("name")), excerpt, _STRUCTURED)
     posted = item.get("datePosted")

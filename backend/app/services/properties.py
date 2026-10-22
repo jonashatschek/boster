@@ -45,6 +45,7 @@ FIELDS: dict[str, FieldSpec] = {
     "rooms": FieldSpec("Antal rum", "number", "rum", important=True),
     "monthly_fee": FieldSpec("Månadsavgift", "number", "kr/mån", important=True),
     "fee_includes": FieldSpec("I avgiften ingår", "text"),
+    "fee_changes": FieldSpec("Kommande avgiftsförändringar", "text"),
     "floor": FieldSpec("Våning", "text"),
     "elevator": FieldSpec("Hiss", "boolean"),
     "balcony": FieldSpec("Balkong/uteplats", "boolean"),
