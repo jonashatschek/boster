@@ -86,6 +86,18 @@ def test_calculate_all_returns_every_formula_even_with_no_data():
     assert all(r.value is None for r in results)
 
 
+def test_total_area_is_derived_from_its_parts_when_not_reported():
+    figures = {"interest_bearing_debt": 32_000_000, "residential_area": 15_575, "commercial_area": 1_215}
+    results = {r.metric_key: r for r in calculate_all(figures)}
+    assert results["total_area"].value == 16_790
+    assert results["debt_per_sqm_total_area"].value == pytest.approx(1_906, abs=1)
+
+
+def test_reported_total_area_is_not_overridden():
+    figures = {"total_area": 9_380, "residential_area": 8_948, "commercial_area": 267}
+    assert "total_area" not in {r.metric_key for r in calculate_all(figures)}
+
+
 def test_calculations_are_deterministic():
     assert calculate_all(FRIHETEN_2025, FRIHETEN_2024) == calculate_all(FRIHETEN_2025, FRIHETEN_2024)
 

@@ -70,7 +70,8 @@ _DEFINITIONS = [
                      Unit.SEK, MetricCategory.BASE_FIGURE,
                      "Lån som förfaller eller ska omförhandlas inom ett år."),
     MetricDefinition("cash", "Kassa och bank", Unit.SEK, MetricCategory.BASE_FIGURE,
-                     "Likvida medel på bankkonto och i kassa."),
+                     "Likvida medel på bankkonto och i kassa. Obs: HSB-föreningar har ofta sina pengar på ett "
+                     "avräkningskonto hos HSB, som redovisas som kortfristig fordran och inte ingår här."),
     # Areas.
     MetricDefinition("residential_area", "Bostadsyta", Unit.SQM, MetricCategory.AREA,
                      "Total bostadsyta, inklusive eventuella hyreslägenheter."),

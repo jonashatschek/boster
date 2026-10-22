@@ -37,9 +37,9 @@ rationale = "En låg andel avgiftsintäkter betyder att föreningen är beroende
 
 [indicators.interest_coverage_ratio]
 direction = "lower_is_worse"
-low_concern_until = 3
-high_concern_from = 1.5
-rationale = "Om rörelseöverskottet före avskrivningar bara täcker räntorna knappt finns lite marginal för räntehöjningar och underhåll."
+low_concern_until = 2
+high_concern_from = 1.2
+rationale = "Om rörelseöverskottet före avskrivningar bara täcker räntorna knappt finns lite marginal för räntehöjningar och underhåll. Underhållskostnader är redan avdragna från överskottet."
 
 [indicators.short_term_debt_share_pct]
 direction = "higher_is_worse"

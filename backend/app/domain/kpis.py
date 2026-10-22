@@ -111,9 +111,29 @@ def calculate_kpi(formula: KpiFormula, current: YearFigures, previous: YearFigur
     return CalculatedKpi(formula.metric_key, value, formula.formula, used, [])
 
 
+# Used only when the report does not state the total area itself. Garage area is not
+# included, which matches how most reports define "totalyta" for key figures.
+TOTAL_AREA_FORMULA = KpiFormula(
+    metric_key="total_area",
+    formula="Bostadsyta + lokalyta",
+    inputs=("residential_area", "commercial_area"),
+    compute=lambda residential, commercial: residential + commercial,
+)
+
+
 def calculate_all(current: YearFigures, previous: YearFigures | None = None) -> list[CalculatedKpi]:
-    """Calculate every known KPI for one fiscal year. Unavailable KPIs are included with value None."""
-    return [calculate_kpi(formula, current, previous) for formula in FORMULAS]
+    """Calculate every known KPI for one fiscal year. Unavailable KPIs are included with value None.
+
+    If the total area is missing but its parts are known, it is calculated first and
+    included in the results, so the per-m² figures can use it.
+    """
+    results: list[CalculatedKpi] = []
+    if current.get("total_area") is None:
+        total_area = calculate_kpi(TOTAL_AREA_FORMULA, current)
+        if total_area.is_available:
+            results.append(total_area)
+            current = {**current, "total_area": total_area.value}
+    return results + [calculate_kpi(formula, current, previous) for formula in FORMULAS]
 
 
 def values_agree(reported: float, calculated: float, relative_tolerance: float = 0.05,
