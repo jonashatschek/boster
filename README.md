@@ -15,11 +15,23 @@ The full product specification is in [specs/spec.md](specs/spec.md).
 | 1 | Domain model, KPI formulas, risk rules, PDF extraction, tests | Done |
 | 2 | Upload a report by file or link → cooperative page with KPIs, charts, sources and manual corrections | Done |
 | 2b | Compare 2–4 cooperatives side by side | Done |
-| 3 | Import a listing (URL, pasted text, or manual entry) → property page linked to a cooperative | Next |
-| 4 | Swedish AI summaries with links to the evidence | Planned |
+| 3 | Import a listing (URL, pasted text, or manual entry) → property page linked to a cooperative | Done |
+| 4 | Swedish AI summaries with links to the evidence | Next |
 | 5 | Comparing properties side by side, and saved comparisons | Planned |
 
 ## What it does today
+
+### Apartments
+
+- **Add a listing** by link, or by pasting its text. Hemnet and Booli block automated fetching (they return HTTP 403 or a robot check), so for those the link is saved and you paste the listing text: open the listing, press Ctrl+A, Ctrl+C, and paste it into Boster. Estate agents' sites can often be fetched directly. Boster never tries to get around a block.
+- **Reads the facts:** address, area, price, number of rooms, monthly fee and what it includes, floor, elevator, balcony, construction year, energy class, cooperative and publication date. Each value keeps the line of listing text it came from. A balcony or elevator is recorded only when the listing states it, never inferred.
+- **Never estimates the price.** A missing price shows as "Saknas".
+- **Your corrections are kept.** Values you edit or mark as checked are never overwritten when the listing is read again.
+- **Links to the cooperative** automatically, but only on an exact name match ("BRF Segelflygaren" = "HSB Bostadsrättsförening Segelflygaren i Stockholm", while "Byamännen" ≠ "Byamännen 2"). Similar names are suggested for you to confirm. A report uploaded later links any waiting listings with a matching name.
+- **Calculates** price per m², annual fee per m², the apartment's approximate share of the cooperative's loans, and the possible fee increase if interest rates rise by one percentage point. The formula and inputs are shown for each.
+- **Shows the agent's description verbatim** and marks it as claims, not facts.
+
+### Cooperatives
 
 - **Add documents** by drag and drop, file picker, or link. Uploading the same file twice reuses the stored copy.
 - **Identifies the cooperative** by its organisation number. Cooperatives with similar names are never merged. If a document ends up under the wrong cooperative, you can move it.
@@ -127,6 +139,7 @@ backend/
   app/
     domain/       Pure logic: metric catalogue, KPI formulas, conflict resolution, risk rules
     documents/    PDF reading: positioned rows, year-column tables, annual-report extraction
+    listings/     Listing import: polite fetching, HTML structured data, text label/value extraction
     services/     Document ingestion and the cooperative analysis
     api/          FastAPI routes
     models.py     Database tables     schemas.py  API models     config.py  Settings
@@ -135,7 +148,7 @@ backend/
   tests/
 frontend/
   src/
-    pages/        Dashboard, CooperativePage, ComparisonPage
+    pages/        Dashboard, PropertyPage, CooperativePage, ComparisonPage
     components/   Uploader, value details dialog, charts, badges
     api.ts        Typed API client      format.ts  Swedish formatting and labels
 specs/spec.md     Product specification
@@ -156,5 +169,6 @@ specs/spec.md     Product specification
 - **No OCR yet.** Scanned PDFs, such as many economic plans (*ekonomiska planer*), are detected and flagged, but no figures are read from them.
 - **The total area is often missing.** Many reports state areas in formats that Boster doesn't recognise yet. Enter the area by hand (click the value, or *Ange* under *Fullständighet*) to enable the per-m² calculations.
 - **HSB cooperatives' cash looks too low.** HSB cooperatives keep most of their cash in an account held by HSB, which the report lists as a receivable. Their *Kassa och bank* figure is therefore small.
-- **Listing import is not built yet.** Fetching listings from Hemnet and Booli will often be blocked. The planned fallbacks are pasting the listing text or entering the details by hand, and the app will not try to get around access restrictions.
+- **Hemnet and Booli listings must be pasted.** Their sites block automated fetching. The text extractor is tested on the layouts these sites produce when copied, but a site redesign can break it. Missing fields are listed so you can fill them in.
+- **No public transport yet.** It needs geocoding and Trafiklab routing, which come after the AI step.
 - **Single user, no login.** The app is meant to run locally. User accounts are needed before hosting it anywhere.

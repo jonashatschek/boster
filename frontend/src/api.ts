@@ -192,6 +192,80 @@ export interface CooperativeComparison {
 
 export const MAX_COMPARED_COOPERATIVES = 4
 
+export type PropertyFieldValue = string | number | boolean | null
+
+export interface PropertyField {
+  key: string
+  label: string
+  value: PropertyFieldValue
+  kind: 'text' | 'number' | 'integer' | 'boolean' | 'date' | 'longtext'
+  unit: string | null
+  status: VerificationStatus
+  method: string | null
+  excerpt: string | null
+  note: string | null
+}
+
+export interface DerivedValue {
+  key: string
+  label: string
+  value: number | null
+  unit: string
+  formula: string
+  inputs: Record<string, string>
+  missing_inputs: string[]
+  note: string | null
+}
+
+export interface LinkedCooperative {
+  id: number
+  name: string
+  organisation_number: string | null
+  fiscal_year: number | null
+  overall_level: ConcernLevel
+  overall_label: string
+  land_tenure: 'owned' | 'leasehold' | null
+  indicators: RiskIndicator[]
+  completeness_available: number
+  completeness_total: number
+}
+
+export interface PropertyOverview {
+  id: number
+  title: string | null
+  source_url: string | null
+  source_name: string | null
+  retrieval_status: 'fetched' | 'pasted' | 'fetch_failed' | 'manual'
+  retrieval_message: string | null
+  retrieved_at: string | null
+  created_at: string
+  updated_at: string
+  fields: PropertyField[]
+  description: PropertyField
+  derived: DerivedValue[]
+  cooperative: LinkedCooperative | null
+  cooperative_suggestions: CooperativeListItem[]
+  missing: string[]
+  has_listing_text: boolean
+}
+
+export interface PropertyListItem {
+  id: number
+  title: string | null
+  address: string | null
+  source_name: string | null
+  asking_price: number | null
+  living_area: number | null
+  rooms: number | null
+  monthly_fee: number | null
+  cooperative_id: number | null
+  cooperative_name: string | null
+  cooperative_overall_level: ConcernLevel | null
+  cooperative_overall_label: string | null
+  retrieval_status: string
+  updated_at: string
+}
+
 export class ApiError extends Error {}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -234,6 +308,20 @@ export const api = {
     request<CooperativeOverview>(`/api/observations/${observationId}`, { method: 'DELETE' }),
   compareCooperatives: (ids: number[]) =>
     request<CooperativeComparison>(`/api/comparisons/cooperatives?ids=${ids.join(',')}`),
+  listProperties: () => request<PropertyListItem[]>('/api/properties'),
+  getProperty: (id: number) => request<PropertyOverview>(`/api/properties/${id}`),
+  addPropertyFromUrl: (url: string) => request<PropertyOverview>('/api/properties/from-url', json('POST', { url })),
+  addPropertyFromText: (text: string, url?: string) =>
+    request<PropertyOverview>('/api/properties/from-text', json('POST', { text, url: url || undefined })),
+  addPropertyText: (id: number, text: string) =>
+    request<PropertyOverview>(`/api/properties/${id}/text`, json('POST', { text })),
+  updateProperty: (id: number, changes: Record<string, PropertyFieldValue>) =>
+    request<PropertyOverview>(`/api/properties/${id}`, json('PATCH', changes)),
+  verifyPropertyField: (id: number, field: string) =>
+    request<PropertyOverview>(`/api/properties/${id}/fields/${field}/verify`, { method: 'POST' }),
+  linkPropertyCooperative: (id: number, cooperativeId: number | null) =>
+    request<PropertyOverview>(`/api/properties/${id}/cooperative`, json('PUT', { cooperative_id: cooperativeId })),
+  deleteProperty: (id: number) => request<void>(`/api/properties/${id}`, { method: 'DELETE' }),
   listMetrics: () => request<MetricDefinition[]>('/api/metrics'),
   uploadDocument: (file: File) => {
     const form = new FormData()

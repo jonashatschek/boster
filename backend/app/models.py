@@ -7,7 +7,7 @@ own provenance. JSON is only used for supplementary messages.
 
 from datetime import date, datetime, timezone
 
-from sqlalchemy import JSON, Date, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, Date, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -31,6 +31,7 @@ class HousingCooperative(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
     documents: Mapped[list["SourceDocument"]] = relationship(back_populates="cooperative")
+    properties: Mapped[list["Property"]] = relationship(back_populates="cooperative")
     observations: Mapped[list["FinancialObservation"]] = relationship(
         back_populates="cooperative", cascade="all, delete-orphan"
     )
@@ -101,3 +102,49 @@ class DocumentFinding(Base):
     excerpt: Mapped[str] = mapped_column(Text)
 
     document: Mapped[SourceDocument] = relationship(back_populates="findings")
+
+
+class Property(Base):
+    """An apartment for sale, from a listing URL, pasted listing text, or manual entry.
+
+    Field values are plain columns so they stay queryable. Where each value came from
+    (listing text, structured data, the user) is kept per field in ``field_sources``.
+    """
+
+    __tablename__ = "properties"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source_url: Mapped[str | None] = mapped_column(Text, index=True)
+    source_name: Mapped[str | None] = mapped_column(String(100))
+    title: Mapped[str | None] = mapped_column(String(300))
+    address: Mapped[str | None] = mapped_column(String(200))
+    municipality: Mapped[str | None] = mapped_column(String(100))
+    neighborhood: Mapped[str | None] = mapped_column(String(100))
+    living_area: Mapped[float | None] = mapped_column(Float)
+    rooms: Mapped[float | None] = mapped_column(Float)
+    floor: Mapped[str | None] = mapped_column(String(40))
+    elevator: Mapped[bool | None] = mapped_column(Boolean)
+    balcony: Mapped[bool | None] = mapped_column(Boolean)
+    balcony_description: Mapped[str | None] = mapped_column(String(100))
+    asking_price: Mapped[float | None] = mapped_column(Float)
+    monthly_fee: Mapped[float | None] = mapped_column(Float)
+    fee_includes: Mapped[str | None] = mapped_column(Text)
+    construction_year: Mapped[int | None] = mapped_column(Integer)
+    energy_class: Mapped[str | None] = mapped_column(String(2))
+    description: Mapped[str | None] = mapped_column(Text)
+    listing_date: Mapped[date | None] = mapped_column(Date)
+    cooperative_name: Mapped[str | None] = mapped_column(String(200))  # As printed in the listing.
+    housing_cooperative_id: Mapped[int | None] = mapped_column(
+        ForeignKey("housing_cooperatives.id", ondelete="SET NULL"), index=True
+    )
+    # The listing text the facts were read from, kept so the analysis can be re-run.
+    listing_text: Mapped[str | None] = mapped_column(Text)
+    retrieval_status: Mapped[str] = mapped_column(String(20))  # RetrievalStatus value.
+    retrieval_message: Mapped[str | None] = mapped_column(Text)
+    retrieved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Field name → {"status", "method", "excerpt", "note", "updated_at"}.
+    field_sources: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+    cooperative: Mapped[HousingCooperative | None] = relationship(back_populates="properties")

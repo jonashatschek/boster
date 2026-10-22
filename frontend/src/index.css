@@ -577,6 +577,37 @@ dl.facts dd {
   font-weight: 600;
 }
 
+/* Property */
+
+.headline-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr));
+  gap: 0.75rem;
+}
+
+.headline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  align-items: flex-start;
+  padding: 1rem;
+}
+
+.headline-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+.description {
+  white-space: pre-line;
+  max-width: 70ch;
+}
+
+textarea {
+  width: 100%;
+  resize: vertical;
+}
+
 .chart-key {
   display: flex;
   flex-wrap: wrap;
@@ -586,6 +617,7 @@ dl.facts dd {
 
 .segmented {
   display: inline-flex;
+  align-self: flex-start;
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;

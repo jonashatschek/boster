@@ -217,3 +217,118 @@ class CooperativeComparison(BaseModel):
     cooperatives: list[ComparedCooperative]
     rows: list[ComparisonRow]
     warnings: list[str]
+
+
+class PropertyField(BaseModel):
+    """One fact about the apartment, with where it came from."""
+
+    key: str
+    label: str
+    value: str | float | int | bool | date | None
+    kind: str  # "text", "number", "integer", "boolean", "date", "longtext"
+    unit: str | None
+    status: str  # VerificationStatus value; "missing" when there is no value.
+    method: str | None  # "text_label", "structured_data", "manual", ...
+    excerpt: str | None  # The listing text the value was read from.
+    note: str | None
+
+
+class DerivedValue(BaseModel):
+    key: str
+    label: str
+    value: float | None
+    unit: str
+    formula: str
+    inputs: dict[str, str]  # Human-readable input → formatted value.
+    missing_inputs: list[str]
+    note: str | None = None
+
+
+class LinkedCooperative(BaseModel):
+    id: int
+    name: str
+    organisation_number: str | None
+    fiscal_year: int | None
+    overall_level: str
+    overall_label: str
+    land_tenure: str | None
+    indicators: list[RiskIndicator]
+    completeness_available: int
+    completeness_total: int
+
+
+class PropertyOverview(BaseModel):
+    id: int
+    title: str | None
+    source_url: str | None
+    source_name: str | None
+    retrieval_status: str
+    retrieval_message: str | None
+    retrieved_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+    fields: list[PropertyField]
+    description: PropertyField
+    derived: list[DerivedValue]
+    cooperative: LinkedCooperative | None
+    cooperative_suggestions: list[CooperativeListItem]
+    missing: list[str]  # Labels of important facts that are missing.
+    has_listing_text: bool
+
+
+class PropertyListItem(BaseModel):
+    id: int
+    title: str | None
+    address: str | None
+    source_name: str | None
+    asking_price: float | None
+    living_area: float | None
+    rooms: float | None
+    monthly_fee: float | None
+    cooperative_id: int | None
+    cooperative_name: str | None
+    cooperative_overall_level: str | None
+    cooperative_overall_label: str | None
+    retrieval_status: str
+    updated_at: datetime
+
+
+class PropertyFromUrl(BaseModel):
+    url: str = Field(min_length=8, max_length=2000)
+
+
+class PropertyFromText(BaseModel):
+    text: str = Field(min_length=20, max_length=200_000)
+    url: str | None = Field(default=None, max_length=2000)
+
+
+class PropertyText(BaseModel):
+    text: str = Field(min_length=20, max_length=200_000)
+
+
+class PropertyUpdate(BaseModel):
+    """Manual corrections. Only the fields present are changed; null clears a value."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    title: str | None = Field(default=None, max_length=300)
+    address: str | None = Field(default=None, max_length=200)
+    municipality: str | None = Field(default=None, max_length=100)
+    neighborhood: str | None = Field(default=None, max_length=100)
+    living_area: float | None = Field(default=None, gt=0, lt=2000)
+    rooms: float | None = Field(default=None, gt=0, lt=50)
+    floor: str | None = Field(default=None, max_length=40)
+    elevator: bool | None = None
+    balcony: bool | None = None
+    asking_price: float | None = Field(default=None, gt=0)
+    monthly_fee: float | None = Field(default=None, ge=0)
+    fee_includes: str | None = Field(default=None, max_length=1000)
+    construction_year: int | None = Field(default=None, ge=1500, le=2100)
+    energy_class: str | None = Field(default=None, pattern=r"^[A-G]$")
+    listing_date: date | None = None
+    cooperative_name: str | None = Field(default=None, max_length=200)
+    description: str | None = Field(default=None, max_length=20_000)
+
+
+class PropertyCooperativeLink(BaseModel):
+    cooperative_id: int | None  # None unlinks.

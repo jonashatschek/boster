@@ -2,6 +2,7 @@ import { Link, Route, Routes } from 'react-router-dom'
 import { ComparisonPage } from './pages/ComparisonPage'
 import { CooperativePage } from './pages/CooperativePage'
 import { Dashboard } from './pages/Dashboard'
+import { PropertyPage } from './pages/PropertyPage'
 
 export default function App() {
   return (
@@ -19,6 +20,7 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/foreningar/:id" element={<CooperativePage />} />
           <Route path="/jamfor" element={<ComparisonPage />} />
+          <Route path="/bostader/:id" element={<PropertyPage />} />
           <Route path="*" element={<p>Sidan finns inte. <Link to="/">Till startsidan</Link></p>} />
         </Routes>
       </main>

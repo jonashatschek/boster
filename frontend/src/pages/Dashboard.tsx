@@ -1,8 +1,16 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { api, ApiError, MAX_COMPARED_COOPERATIVES, type CooperativeListItem, type DocumentSummary } from '../api'
+import {
+  api,
+  ApiError,
+  MAX_COMPARED_COOPERATIVES,
+  type CooperativeListItem,
+  type DocumentSummary,
+  type PropertyListItem,
+} from '../api'
 import { ConcernBadge } from '../components/Badges'
 import { DocumentUploader } from '../components/DocumentUploader'
+import { ListingImporter } from '../components/ListingImporter'
 import { formatDate } from '../format'
 
 export function Dashboard() {
@@ -10,12 +18,17 @@ export function Dashboard() {
   const [cooperatives, setCooperatives] = useState<CooperativeListItem[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<number[]>([])
+  const [properties, setProperties] = useState<PropertyListItem[] | null>(null)
 
   useEffect(() => {
     api
       .listCooperatives()
       .then(setCooperatives)
       .catch((caught) => setError(caught instanceof ApiError ? caught.message : 'Kunde inte hämta föreningar.'))
+    api
+      .listProperties()
+      .then(setProperties)
+      .catch(() => setProperties([]))
   }, [])
 
   function toggleSelected(id: number) {
@@ -37,7 +50,10 @@ export function Dashboard() {
     <div className="stack" style={{ gap: '1.5rem' }}>
       <div>
         <h1>Översikt</h1>
-        <p className="muted">Ladda upp en förenings årsredovisning för att se nyckeltal, risker och källor.</p>
+        <p className="muted">
+          Lägg till en bostad från en annons, och ladda upp föreningens årsredovisning för att se nyckeltal, risker och
+          källor.
+        </p>
       </div>
 
       <div className="grid-2">
@@ -47,16 +63,44 @@ export function Dashboard() {
         </section>
         <section className="card stack">
           <h2>Analysera en bostad</h2>
-          <div className="input-row">
-            <input type="url" placeholder="Länk till annons på Hemnet, Booli eller mäklarsida" disabled aria-label="Annonslänk" />
-            <button disabled>Analysera</button>
-          </div>
-          <p className="small muted">
-            Kommer i nästa steg. Då kan du klistra in en annonslänk, eller annonsens text om sidan inte går att hämta, och
-            koppla bostaden till en förening.
-          </p>
+          <ListingImporter onAdded={(property) => navigate(`/bostader/${property.id}`)} />
         </section>
       </div>
+
+      <section>
+        <h2>Bostäder</h2>
+        {properties === null && <p className="muted">Laddar …</p>}
+        {properties?.length === 0 && <p className="muted">Inga bostäder ännu. Lägg till en annons ovan.</p>}
+        {properties && properties.length > 0 && (
+          <ul className="list card" style={{ padding: '0 1.25rem' }}>
+            {properties.map((property) => (
+              <li key={property.id} className="spread">
+                <div>
+                  <Link to={`/bostader/${property.id}`}>
+                    <strong>{property.address ?? property.title ?? 'Bostad utan adress'}</strong>
+                  </Link>
+                  <div className="small muted">
+                    {[
+                      property.asking_price ? `${new Intl.NumberFormat('sv-SE').format(property.asking_price)} kr` : 'Pris saknas',
+                      property.living_area ? `${property.living_area} m²` : null,
+                      property.rooms ? `${String(property.rooms).replace('.', ',')} rum` : null,
+                      property.monthly_fee ? `${new Intl.NumberFormat('sv-SE').format(property.monthly_fee)} kr/mån` : null,
+                      property.cooperative_name,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </div>
+                </div>
+                {property.cooperative_overall_level ? (
+                  <ConcernBadge level={property.cooperative_overall_level} label={`Förening: ${property.cooperative_overall_label}`} />
+                ) : (
+                  <span className="badge">Ingen förening kopplad</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section>
         <div className="spread">

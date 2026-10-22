@@ -6,8 +6,6 @@ as data.
 """
 
 import hashlib
-import ipaddress
-import socket
 from enum import StrEnum
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -21,6 +19,8 @@ from app.documents.annual_report import AnnualReportExtraction, DocumentType, ex
 from app.domain.metrics import METRICS
 from app.domain.provenance import VerificationStatus
 from app.models import DocumentFinding, FinancialObservation, HousingCooperative, SourceDocument
+from app.net_safety import UnsafeUrlError, check_public_http_url, reject_private_host
+from app.services.properties import link_matching_properties
 
 
 class ExtractionStatus(StrEnum):
@@ -75,10 +75,10 @@ def ingest_pdf(session: Session, settings: Settings, content: bytes, filename: s
 
 def download_pdf(settings: Settings, url: str) -> tuple[bytes, str]:
     """Download a PDF from a public URL. Returns (content, filename)."""
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https") or not parsed.hostname:
-        raise DocumentError("Ange en fullständig länk som börjar med http:// eller https://.")
-    _reject_private_host(parsed.hostname)
+    try:
+        check_public_http_url(url)
+    except UnsafeUrlError as error:
+        raise DocumentError(str(error)) from error
 
     try:
         with httpx.Client(timeout=settings.document_download_timeout_seconds, follow_redirects=True) as client:
@@ -87,7 +87,10 @@ def download_pdf(settings: Settings, url: str) -> tuple[bytes, str]:
                     raise DocumentError("Sidan kräver inloggning eller nekar åtkomst. Ladda ner filen och ladda upp den här.")
                 if response.status_code >= 400:
                     raise DocumentError(f"Dokumentet kunde inte hämtas (HTTP {response.status_code}).")
-                _reject_private_host(response.url.host)  # After redirects.
+                try:
+                    reject_private_host(response.url.host)  # After redirects.
+                except UnsafeUrlError as error:
+                    raise DocumentError(str(error)) from error
                 content = bytearray()
                 for chunk in response.iter_bytes():
                     content += chunk
@@ -180,21 +183,10 @@ def _find_or_create_cooperative(session: Session, extraction: AnnualReportExtrac
         name=extraction.cooperative_name or f"Förening {extraction.organisation_number}",
     )
     session.add(cooperative)
+    link_matching_properties(session, cooperative)
     return cooperative
 
 
 def _safe_filename(filename: str) -> str:
     name = Path(filename.replace("\\", "/")).name.strip() or "dokument.pdf"
     return name[:200]
-
-
-def _reject_private_host(hostname: str) -> None:
-    """Refuse to fetch from this machine or the local network."""
-    try:
-        addresses = {info[4][0] for info in socket.getaddrinfo(hostname, None)}
-    except socket.gaierror as error:
-        raise DocumentError("Adressen kunde inte hittas. Kontrollera länken.") from error
-    for address in addresses:
-        ip = ipaddress.ip_address(address.split("%")[0])
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
-            raise DocumentError("Länkar till lokala nätverksadresser tillåts inte.")
