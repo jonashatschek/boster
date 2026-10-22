@@ -1,0 +1,23 @@
+# Secrets and local configuration
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+
+# Node
+node_modules/
+frontend/dist/
+
+# Local data: database and uploaded documents
+backend/data/
+
+# Third-party sample documents (download with backend/scripts/download_samples.py)
+sample_documents/
+
+# Editors
+.vscode/
+.idea/
