@@ -53,15 +53,33 @@ Requirements: Python 3.12 or later and Node.js 20 or later.
 
 ### 1. Backend (FastAPI)
 
+All commands below start from the project root (the folder containing `backend` and `frontend`).
+
+**Windows PowerShell**
+
+```powershell
+cd backend
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
+Copy-Item .env.example .env     # then fill in API keys (optional for now)
+uvicorn app.main:create_app --factory --reload
+```
+
+If PowerShell refuses to run `Activate.ps1`, run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once.
+
+**macOS/Linux or Git Bash**
+
 ```bash
 cd backend
 python -m venv .venv
-.venv/Scripts/activate          # Windows (Git Bash: source .venv/Scripts/activate)
-# source .venv/bin/activate     # macOS/Linux
+source .venv/bin/activate       # Git Bash on Windows: source .venv/Scripts/activate
 pip install -e ".[dev]"
-cp .env.example .env            # then fill in API keys (optional for now)
+cp .env.example .env
 uvicorn app.main:create_app --factory --reload
 ```
+
+After the first setup, starting the backend again only needs the `cd`, activate and `uvicorn` lines.
 
 The API runs on <http://127.0.0.1:8000>, with interactive docs at <http://127.0.0.1:8000/docs>.
 
@@ -77,8 +95,9 @@ Open <http://localhost:5173>. The dev server forwards `/api` calls to the backen
 
 ### 3. Tests
 
+With the backend's virtual environment activated, from the `backend` folder:
+
 ```bash
-cd backend
 python -m scripts.download_samples   # once: fetches the sample annual reports (not stored in git)
 python -m pytest
 ```

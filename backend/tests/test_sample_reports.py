@@ -103,6 +103,24 @@ EXPECTED = {
             ("commercial_area", 2025): 1_792,
         },
     },
+    # Template with "2025-08" column headers, "Föreningslån" for debt and BOA/LOA areas.
+    "702002-3532_arsredovisning.pdf": {
+        "organisation_number": "702002-3532",
+        "name": "HSB Brf Toppsockret i Stockholm",
+        "fiscal_year": 2025,
+        "land_tenure": None,  # Only mentioned in a generic glossary at the end.
+        "figures": {
+            ("interest_bearing_debt", 2025): 15_777_704,
+            ("short_term_interest_bearing_debt", 2025): 15_777_704,
+            ("debt_per_sqm_total_area", 2025): 1_443,
+            ("debt_per_sqm_tenant_owned_area", 2020): 1_132,
+            ("savings_per_sqm", 2023): 200,
+            ("interest_sensitivity_pct", 2024): 1.5,
+            ("result_after_financial_items", 2025): -635_000,  # "Res. ef. fin. poster" in tkr.
+            ("residential_area", 2025): 10_747,
+            ("commercial_area", 2025): 186,
+        },
+    },
 }
 
 
@@ -151,6 +169,21 @@ def test_conflicting_areas_in_one_report_are_both_kept():
 def test_extended_fiscal_year_is_warned_about():
     extraction = extraction_of("soderbysjon_arsredovisning.pdf")
     assert any("16 månader" in warning for warning in extraction.warnings)
+
+
+def test_implausible_value_is_kept_but_flagged():
+    # Energy cost is printed as 1951 kr/kvm for 2025 (160 the year before), probably a misprint.
+    extraction = extraction_of("702002-3532_arsredovisning.pdf")
+    energy = next(f for f in extraction.figures if f.metric_key == "energy_cost_per_sqm" and f.fiscal_year == 2025)
+    assert energy.value == 1_951
+    assert "Ovanligt" in energy.note
+    assert any("1951" in warning for warning in extraction.warnings)
+
+
+def test_boyta_figure_is_noted_as_interpreted():
+    extraction = extraction_of("702002-3532_arsredovisning.pdf")
+    debt = next(f for f in extraction.figures if f.metric_key == "debt_per_sqm_tenant_owned_area")
+    assert "boyta" in debt.note
 
 
 def test_scanned_economic_plan_is_recognised_and_not_guessed_from():

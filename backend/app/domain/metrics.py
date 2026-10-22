@@ -44,6 +44,15 @@ class MetricDefinition:
     # True when the cooperative is required to print this figure in its annual report
     # (obligatoriska nyckeltal, mandatory for financial years starting 2023 or later).
     mandatory_since_2023: bool = False
+    # Values outside this range are almost certainly misprints or misreadings. They are
+    # kept, but flagged for the user to check.
+    plausible_range: tuple[float, float] | None = None
+
+    def is_plausible(self, value: float) -> bool:
+        if self.plausible_range is None:
+            return True
+        low, high = self.plausible_range
+        return low <= value <= high
 
 
 _DEFINITIONS = [
@@ -84,24 +93,25 @@ _DEFINITIONS = [
     # Key figures. Most are both printed in the report and calculable by us.
     MetricDefinition("debt_per_sqm_total_area", "Skuldsättning per kvm totalyta", Unit.SEK_PER_SQM,
                      MetricCategory.KEY_FIGURE, "Räntebärande skulder delat med totalyta.",
-                     AreaBasis.TOTAL_AREA, mandatory_since_2023=True),
+                     AreaBasis.TOTAL_AREA, mandatory_since_2023=True, plausible_range=(0, 40_000)),
     MetricDefinition("debt_per_sqm_tenant_owned_area", "Skuldsättning per kvm bostadsrättsyta",
                      Unit.SEK_PER_SQM, MetricCategory.KEY_FIGURE,
                      "Räntebärande skulder delat med yta upplåten med bostadsrätt.",
-                     AreaBasis.TENANT_OWNED_AREA, mandatory_since_2023=True),
+                     AreaBasis.TENANT_OWNED_AREA, mandatory_since_2023=True, plausible_range=(0, 50_000)),
     MetricDefinition("savings_per_sqm", "Sparande per kvm", Unit.SEK_PER_SQM, MetricCategory.KEY_FIGURE,
                      "(Årets resultat + avskrivningar + kostnadsfört planerat underhåll) / totalyta. "
                      "Visar hur mycket föreningen kan avsätta till framtida underhåll.",
-                     AreaBasis.TOTAL_AREA, mandatory_since_2023=True),
+                     AreaBasis.TOTAL_AREA, mandatory_since_2023=True, plausible_range=(-1_500, 1_500)),
     MetricDefinition("interest_sensitivity_pct", "Räntekänslighet", Unit.PERCENT, MetricCategory.KEY_FIGURE,
                      "Hur många procent årsavgifterna behöver höjas om räntan stiger en procentenhet. "
-                     "Räntebärande skulder × 1 % / årsavgifter.", mandatory_since_2023=True),
+                     "Räntebärande skulder × 1 % / årsavgifter.", mandatory_since_2023=True,
+                     plausible_range=(0, 40)),
     MetricDefinition("energy_cost_per_sqm", "Energikostnad per kvm", Unit.SEK_PER_SQM,
                      MetricCategory.KEY_FIGURE, "Kostnad för el, värme och vatten delat med totalyta.",
-                     AreaBasis.TOTAL_AREA, mandatory_since_2023=True),
+                     AreaBasis.TOTAL_AREA, mandatory_since_2023=True, plausible_range=(0, 800)),
     MetricDefinition("annual_fee_per_sqm", "Årsavgift per kvm bostadsrättsyta", Unit.SEK_PER_SQM,
                      MetricCategory.KEY_FIGURE, "Årsavgifter delat med yta upplåten med bostadsrätt.",
-                     AreaBasis.TENANT_OWNED_AREA, mandatory_since_2023=True),
+                     AreaBasis.TENANT_OWNED_AREA, mandatory_since_2023=True, plausible_range=(100, 3_000)),
     MetricDefinition("fee_share_of_revenue_pct", "Årsavgifternas andel av intäkterna", Unit.PERCENT,
                      MetricCategory.KEY_FIGURE,
                      "Andel av rörelseintäkterna som kommer från årsavgifter. "

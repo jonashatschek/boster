@@ -41,6 +41,9 @@ def test_recognises_empty_cell_markers(text):
         ("2025-08-31", 2025),
         ("2024-09-01 - 2025-08-31", 2025),
         ("2025-12-31", 2025),
+        ("2025-08", 2025),  # Year and closing month.
+        ("2020-08", 2020),
+        ("2011-12", 2012),  # Ambiguous; read as the fiscal year 2011/12.
     ],
 )
 def test_parses_fiscal_year_labels(label, fiscal_year):

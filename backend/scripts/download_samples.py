@@ -23,6 +23,8 @@ SAMPLES = {
         "https://documents.bcdn.se/b3/8d/cdcd074b833d/brf_byamannen_2_769616-5187_-_signerad_arsredovisning_2025_1.pdf",
     "soderbysjon_arsredovisning.pdf":
         "https://documents.bcdn.se/59/61/a041d9d7334f/360159.pdf",
+    "702002-3532_arsredovisning.pdf":
+        "https://documents.bcdn.se/a5/1f/2ace0062c08c/702002-3532.pdf",
 }
 
 

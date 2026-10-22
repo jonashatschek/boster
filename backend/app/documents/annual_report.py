@@ -14,7 +14,7 @@ from enum import StrEnum
 
 import pymupdf
 
-from app.domain.metrics import METRICS, Unit
+from app.domain.metrics import METRICS, AreaBasis, Unit
 from app.domain.provenance import ExtractionMethod, ValueOrigin
 from app.documents.number_parsing import parse_swedish_number
 from app.documents.pdf_layout import PageLayout, read_layout
@@ -83,8 +83,9 @@ class AnnualReportExtraction:
 # the first matching pattern wins, so the more specific patterns come first.
 
 _KEY_FIGURE_PATTERNS: list[tuple[str, re.Pattern]] = [
-    ("debt_per_sqm_tenant_owned_area", re.compile(r"skulds[äa]ttning.*(bostadsr[äa]tt|brf|br-yta|upplåten)")),
-    ("debt_per_sqm_total_area", re.compile(r"skulds[äa]ttning")),
+    ("debt_per_sqm_tenant_owned_area",
+     re.compile(r"(skulds[äa]ttning|föreningslån).*(bostadsr[äa]tt|brf|br-yta|upplåten|boyta)")),
+    ("debt_per_sqm_total_area", re.compile(r"skulds[äa]ttning|föreningslån.*(kvm|m2|m²)")),
     ("savings_per_sqm", re.compile(r"^sparande")),
     ("interest_sensitivity_pct", re.compile(r"r[äa]ntek[äa]nslighet")),
     ("energy_cost_per_sqm", re.compile(r"energikostnad")),
@@ -92,9 +93,12 @@ _KEY_FIGURE_PATTERNS: list[tuple[str, re.Pattern]] = [
     ("annual_fee_per_sqm", re.compile(r"årsavgift.*(kvm|m2|m²)")),
     ("solidity_pct", re.compile(r"^soliditet")),
     ("net_revenue", re.compile(r"^nettoomsättning")),
-    ("result_after_financial_items", re.compile(r"^resultat efter fin")),
+    ("result_after_financial_items", re.compile(r"^res(ultat|\.)?\s*ef(ter|\.)?\s*fin")),
     ("total_assets", re.compile(r"^balansomslutning")),
 ]
+# Some templates say "boyta" (residential area) where the mandatory key figure is per
+# tenant-owned area. The two only differ when the cooperative has rental apartments.
+_BOYTA_NOTE = "Redovisat per kvm boyta i dokumentet. Tolkat som yta upplåten med bostadsrätt."
 
 _INCOME_STATEMENT_PATTERNS: list[tuple[str, re.Pattern]] = [
     ("net_revenue", re.compile(r"^nettoomsättning$")),
@@ -375,6 +379,8 @@ def _match(label: str, patterns: list[tuple[str, re.Pattern]]) -> str | None:
 def _key_figure_values(metric_key: str, row: PeriodTableRow, seen: set[tuple[str, int]],
                        warnings: list[str]) -> list[ExtractedFigure]:
     scale, scale_note = _amount_scale(metric_key, row)
+    if re.search(r"\bboyta\b", row.label.lower()) and METRICS[metric_key].area_basis == AreaBasis.TENANT_OWNED_AREA:
+        scale_note = _BOYTA_NOTE
     figures = []
     for year, raw_value in row.values.items():
         if (metric_key, year) in seen:
@@ -386,9 +392,15 @@ def _key_figure_values(metric_key: str, row: PeriodTableRow, seen: set[tuple[str
             )
             continue
         seen.add((metric_key, year))
+        value = raw_value * scale
+        note = scale_note
+        if not METRICS[metric_key].is_plausible(value):
+            note = " ".join(filter(None, [note, "Ovanligt värde. Kontrollera mot dokumentet; det kan vara ett tryckfel."]))
+            warnings.append(f"{METRICS[metric_key].label} för {year} anges som {raw_value:g} på sidan "
+                            f"{row.page_number}, vilket är ovanligt. Kontrollera värdet.")
         figures.append(ExtractedFigure(
-            metric_key, year, raw_value * scale, row.page_number, row.label,
-            ExtractionMethod.PDF_KEY_FIGURES_TABLE, ValueOrigin.REPORTED, scale_note,
+            metric_key, year, value, row.page_number, row.label,
+            ExtractionMethod.PDF_KEY_FIGURES_TABLE, ValueOrigin.REPORTED, note,
         ))
     return figures
 
@@ -452,9 +464,14 @@ _AREA_TEXT_PATTERNS: list[tuple[str, re.Pattern]] = [
                                     re.IGNORECASE)),
     ("commercial_area", re.compile(rf"(?:total\s+)?lokal(?:area|yta)n?\s*\(?\s*{_AREA_NUMBER}\s*{_AREA_UNIT}",
                                    re.IGNORECASE)),
+    # Standard abbreviations: BOA (bostadsarea) and LOA (lokalarea).
+    ("residential_area", re.compile(rf"\bBOA\s*\(?\s*{_AREA_NUMBER}\s*{_AREA_UNIT}")),
+    ("commercial_area", re.compile(rf"\bLOA\s*\(?\s*{_AREA_NUMBER}\s*{_AREA_UNIT}")),
     ("tenant_owned_area", re.compile(
         rf"lägenheter\s*\(upplåtna med bostadsrätt\)\s*{_AREA_NUMBER}(?!\s*\d)", re.IGNORECASE)),
 ]
+# The management report rarely runs past page 12; later pages are statements and notes.
+_AREA_PAGES = 12
 _AREA_HEADER_WORDS = {
     "bostadsyta": "residential_area", "boyta": "residential_area", "lokalyta": "commercial_area",
     "totalyta": "total_area", "total yta": "total_area",
@@ -462,14 +479,14 @@ _AREA_HEADER_WORDS = {
 
 
 def _extract_areas(pages: list[PageLayout]) -> list[ExtractedFigure]:
-    """Areas, taken from the first pages (the management report) where the property is described.
+    """Areas, taken from the management report, where the property and key figures are described.
 
     Every distinct value is kept. Reports sometimes give different areas in different
     places (for example from a ground lease contract and from the key figure notes),
     and the user should see that instead of us picking one.
     """
     found: dict[tuple[str, float], ExtractedFigure] = {}
-    for page in pages[:8]:
+    for page in pages[:_AREA_PAGES]:
         text = re.sub(r"[ \t]*\n[ \t]*", " ", page.text)
         for metric_key, pattern in _AREA_TEXT_PATTERNS:
             for match in pattern.finditer(text):

@@ -33,13 +33,15 @@ def is_thousands_group(text: str) -> bool:
 
 
 # Period labels used as column headers: "2025", "2024/2025", "2024 - 2025", "2024/25",
-# "2025-12-31", or "2024-09-01 - 2025-08-31". The fiscal year is identified by the year
-# in which it ends.
+# "2025-12-31", "2025-08" (year and closing month), or "2024-09-01 - 2025-08-31". The
+# fiscal year is identified by the year in which it ends. "2011-12" is ambiguous; it is
+# read as the fiscal year 2011/12, since the range pattern is tried first.
 _DATE = r"(?P<{name}>\d{{4}}-\d{{2}}-\d{{2}})"
 _PERIOD_PATTERNS = [
     re.compile(rf"^{_DATE.format(name='start')}\s*[-–]\s*{_DATE.format(name='end')}$"),
     re.compile(rf"^{_DATE.format(name='end')}$"),
     re.compile(r"^(?P<start_year>(?:19|20)\d{2})\s*[/–-]\s*(?P<end_year>(?:19|20)?\d{2})$"),
+    re.compile(r"^(?P<end_year>(?:19|20)\d{2})-(?:0[1-9]|1[0-2])$"),
     re.compile(r"^(?P<end_year>(?:19|20)\d{2})$"),
 ]
 
@@ -57,5 +59,7 @@ def parse_fiscal_year_label(text: str) -> int | None:
         end_year = groups["end_year"]
         if len(end_year) == 2:
             end_year = groups["start_year"][:2] + end_year
+        if groups.get("start_year") and int(end_year) != int(groups["start_year"]) + 1:
+            continue  # Not a fiscal year range, e.g. "2025-08" is a year and month.
         return int(end_year)
     return None
