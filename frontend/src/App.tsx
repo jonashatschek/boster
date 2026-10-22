@@ -1,4 +1,5 @@
 import { Link, Route, Routes } from 'react-router-dom'
+import { ComparisonPage } from './pages/ComparisonPage'
 import { CooperativePage } from './pages/CooperativePage'
 import { Dashboard } from './pages/Dashboard'
 
@@ -17,6 +18,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/foreningar/:id" element={<CooperativePage />} />
+          <Route path="/jamfor" element={<ComparisonPage />} />
           <Route path="*" element={<p>Sidan finns inte. <Link to="/">Till startsidan</Link></p>} />
         </Routes>
       </main>

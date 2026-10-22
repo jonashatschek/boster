@@ -143,6 +143,55 @@ export interface MetricDefinition {
   area_basis: string | null
 }
 
+export interface ComparedCooperative {
+  id: number
+  name: string
+  organisation_number: string | null
+  land_tenure: 'owned' | 'leasehold' | null
+  fiscal_year: number | null
+  period_months: number | null
+  overall_level: ConcernLevel
+  overall_label: string
+  completeness_available: number
+  completeness_total: number
+}
+
+export interface ComparisonCell {
+  cooperative_id: number
+  fiscal_year: number | null
+  value: number | null
+  status: VerificationStatus
+  level: ConcernLevel | null
+  level_label: string | null
+  warning: string | null
+}
+
+export interface HistoryPoint {
+  fiscal_year: number
+  value: number | null
+  status: VerificationStatus
+}
+
+export interface ComparisonRow {
+  key: string
+  label: string
+  unit: string
+  description: string
+  area_basis: string | null
+  is_default: boolean
+  cells: ComparisonCell[]
+  history: Record<string, HistoryPoint[]>
+  note: string | null
+}
+
+export interface CooperativeComparison {
+  cooperatives: ComparedCooperative[]
+  rows: ComparisonRow[]
+  warnings: string[]
+}
+
+export const MAX_COMPARED_COOPERATIVES = 4
+
 export class ApiError extends Error {}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -183,6 +232,8 @@ export const api = {
     request<CooperativeOverview>(`/api/observations/${observationId}/verify`, { method: 'POST' }),
   deleteObservation: (observationId: number) =>
     request<CooperativeOverview>(`/api/observations/${observationId}`, { method: 'DELETE' }),
+  compareCooperatives: (ids: number[]) =>
+    request<CooperativeComparison>(`/api/comparisons/cooperatives?ids=${ids.join(',')}`),
   listMetrics: () => request<MetricDefinition[]>('/api/metrics'),
   uploadDocument: (file: File) => {
     const form = new FormData()

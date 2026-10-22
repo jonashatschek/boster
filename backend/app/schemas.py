@@ -170,3 +170,50 @@ class MetricDefinitionOut(BaseModel):
     category: str
     description: str
     area_basis: str | None
+
+
+class ComparedCooperative(BaseModel):
+    id: int
+    name: str
+    organisation_number: str | None
+    land_tenure: str | None
+    fiscal_year: int | None  # The latest fiscal year, used for the comparison.
+    period_months: int | None  # Length of that fiscal year, when known.
+    overall_level: str
+    overall_label: str
+    completeness_available: int
+    completeness_total: int
+
+
+class ComparisonCell(BaseModel):
+    cooperative_id: int
+    fiscal_year: int | None
+    value: float | None
+    status: str
+    level: str | None  # Concern level, for metrics that have a risk rule.
+    level_label: str | None
+    warning: str | None = None
+
+
+class HistoryPoint(BaseModel):
+    fiscal_year: int
+    value: float | None
+    status: str
+
+
+class ComparisonRow(BaseModel):
+    key: str
+    label: str
+    unit: str
+    description: str
+    area_basis: str | None
+    is_default: bool  # Shown without expanding "all figures".
+    cells: list[ComparisonCell]  # One per cooperative, in the same order as `cooperatives`.
+    history: dict[int, list[HistoryPoint]]  # Cooperative id → values per year.
+    note: str | None = None
+
+
+class CooperativeComparison(BaseModel):
+    cooperatives: list[ComparedCooperative]
+    rows: list[ComparisonRow]
+    warnings: list[str]

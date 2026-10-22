@@ -2,64 +2,11 @@
 
 from pathlib import Path
 
-import pymupdf
 import pytest
-from fastapi.testclient import TestClient
 
-from app.config import Settings
-from app.main import create_app
+from tests.report_factory import make_report_pdf
 
 SAMPLES = Path(__file__).parents[2] / "sample_documents"
-
-
-@pytest.fixture
-def client(tmp_path):
-    settings = Settings(data_directory=tmp_path, trafiklab_api_key=None, anthropic_api_key=None)
-    with TestClient(create_app(settings)) as test_client:
-        yield test_client
-
-
-def make_report_pdf() -> bytes:
-    """A small but real PDF laid out like an annual report."""
-    document = pymupdf.open()
-    cover = document.new_page()
-    cover.insert_text((60, 80), "Årsredovisning för Brf Provhuset", fontsize=12)
-    cover.insert_text((60, 100), "769600-1234", fontsize=10)
-    cover.insert_text((60, 120), "Räkenskapsåret 2025-01-01 - 2025-12-31", fontsize=10)
-    cover.insert_text((60, 140), "Fastigheten innehas med tomträtt.", fontsize=10)
-
-    def table(page, y, rows):
-        for label, *values in rows:
-            page.insert_text((60, y), label, fontsize=9)
-            for x_right, value in zip((360, 430), values):
-                page.insert_text((x_right - len(value) * 4.6, y), value, fontsize=9)
-            y += 14
-
-    key_figures = document.new_page()
-    key_figures.insert_text((60, 60), "Flerårsöversikt", fontsize=11)
-    table(key_figures, 80, [
-        ("", "2025", "2024"),
-        ("Skuldsättning, kr/kvm", "4 000", "4 200"),
-        ("Sparande, kr/kvm", "90", "120"),
-        ("Räntekänslighet, %", "12", "11"),
-    ])
-    statements = document.new_page()
-    statements.insert_text((60, 60), "Resultaträkning och balansräkning", fontsize=11)
-    table(statements, 80, [
-        ("", "2025-12-31", "2024-12-31"),
-        ("Nettoomsättning", "5 000 000", "4 800 000"),
-        ("Rörelseresultat", "900 000", "800 000"),
-        ("Räntekostnader och liknande resultatposter", "-700 000", "-600 000"),
-        ("Årets resultat", "200 000", "200 000"),
-        ("Kassa och bank", "1 000 000", "900 000"),
-        ("Summa tillgångar", "90 000 000", "91 000 000"),
-        ("Summa eget kapital", "50 000 000", "49 800 000"),
-        ("Långfristiga skulder", "", ""),
-        ("Skulder till kreditinstitut", "40 000 000", "41 000 000"),
-    ])
-    content = document.tobytes()
-    document.close()
-    return content
 
 
 def upload(client, content, filename="arsredovisning.pdf"):

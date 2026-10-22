@@ -3,7 +3,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import cooperatives, documents
+from app.api import comparisons, cooperatives, documents
 from app.config import Settings, get_settings
 from app.db import Database
 from app.domain.risk import load_risk_rules
@@ -24,6 +24,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_methods=["*"], allow_headers=["*"])
     app.include_router(documents.router)
     app.include_router(cooperatives.router)
+    app.include_router(comparisons.router)
 
     @app.get("/api/health")
     def health():

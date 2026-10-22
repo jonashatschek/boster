@@ -14,9 +14,10 @@ The full product specification is in [specs/spec.md](specs/spec.md).
 |---|---|---|
 | 1 | Domain model, KPI formulas, risk rules, PDF extraction, tests | Done |
 | 2 | Upload a report by file or link → cooperative page with KPIs, charts, sources and manual corrections | Done |
+| 2b | Compare 2–4 cooperatives side by side | Done |
 | 3 | Import a listing (URL, pasted text, or manual entry) → property page linked to a cooperative | Next |
 | 4 | Swedish AI summaries with links to the evidence | Planned |
-| 5 | Comparing properties and cooperatives side by side | Planned |
+| 5 | Comparing properties side by side, and saved comparisons | Planned |
 
 ## What it does today
 
@@ -30,6 +31,7 @@ The full product specification is in [specs/spec.md](specs/spec.md).
 - **Rates risk with rules:** each indicator is rated *Låg*, *Måttlig* or *Hög risk*, with its threshold shown next to the rating. The overall rating needs several warning signs and never rests on a single figure. You can change every threshold in [backend/config/risk_rules.toml](backend/config/risk_rules.toml).
 - **Shows trends** over time. A year with no data stays empty in the chart and is never filled in by interpolation.
 - **Quotes the report on maintenance and loans:** verbatim passages that mention pipe replacement, roof, façade, windows, elevators, fee changes, loans and auditor remarks, each with its page number. Boster does not interpret these passages.
+- **Compares cooperatives:** tick 2–4 cooperatives on the dashboard and choose *Jämför*. Each cooperative's latest year is shown side by side, with every cell coloured by its risk rating; cooperatives are not ranked. For each key figure there is a bar chart of the latest year and a line chart over time. The page warns when the compared fiscal years differ, when a fiscal year isn't 12 months (that affects annual amounts but not per-m² figures), and when figures are missing. Debt per m² of total area and debt per m² of tenant-owned area are always separate rows. The selection is kept in the URL (`/jamfor?ids=1,3`), so it can be bookmarked.
 - **Lets you correct values:** mark an extracted value as checked, or enter your own. Your value takes precedence, and the original stays visible as a source.
 
 ### Value statuses
@@ -114,7 +116,7 @@ backend/
   tests/
 frontend/
   src/
-    pages/        Dashboard, CooperativePage
+    pages/        Dashboard, CooperativePage, ComparisonPage
     components/   Uploader, value details dialog, charts, badges
     api.ts        Typed API client      format.ts  Swedish formatting and labels
 specs/spec.md     Product specification
