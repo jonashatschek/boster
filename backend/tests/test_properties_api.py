@@ -183,3 +183,27 @@ def test_list_shows_cooperative_risk(client):
     [item] = client.get("/api/properties").json()
     assert item["asking_price"] == 4_250_000
     assert item["cooperative_overall_level"] is not None
+
+
+def test_refresh_updates_from_page_but_keeps_manual_values(client, monkeypatch):
+    agent_site(monkeypatch)
+    overview = client.post("/api/properties/from-url", json={"url": "https://maklare.example/objekt/1"}).json()
+    client.patch(f"/api/properties/{overview['id']}", json={"monthly_fee": 5_000})
+    overview = client.post(f"/api/properties/{overview['id']}/refresh").json()
+    assert field(overview, "monthly_fee")["value"] == 5_000
+    assert field(overview, "living_area")["value"] == 71
+
+
+def test_failed_refresh_keeps_existing_data(client, monkeypatch):
+    agent_site(monkeypatch)
+    overview = client.post("/api/properties/from-url", json={"url": "https://maklare.example/objekt/1"}).json()
+    blocked_site(monkeypatch)
+    overview = client.post(f"/api/properties/{overview['id']}/refresh").json()
+    assert overview["retrieval_status"] == "fetched"
+    assert field(overview, "living_area")["value"] == 71
+    assert "tillåter inte" in overview["retrieval_message"]
+
+
+def test_refresh_without_url_is_refused(client):
+    overview = client.post("/api/properties/from-text", json={"text": HEMNET_STYLE}).json()
+    assert client.post(f"/api/properties/{overview['id']}/refresh").status_code == 409

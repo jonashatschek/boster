@@ -11,6 +11,7 @@ import {
 } from '../api'
 import { ConcernBadge, StatusBadge } from '../components/Badges'
 import { DocumentUploader } from '../components/DocumentUploader'
+import { ListingDescription } from '../components/ListingDescription'
 import { formatDate, formatKronor, formatValue, LAND_TENURE_LABELS } from '../format'
 
 const METHOD_LABELS: Record<string, string> = {
@@ -39,6 +40,7 @@ export function PropertyPage() {
   const [property, setProperty] = useState<PropertyOverview | null>(null)
   const [cooperatives, setCooperatives] = useState<CooperativeListItem[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
 
   const load = useCallback(() => {
     api
@@ -65,6 +67,12 @@ export function PropertyPage() {
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : 'Något gick fel.')
     }
+  }
+
+  async function refresh() {
+    setRefreshing(true)
+    await act(() => api.refreshProperty(property!.id))
+    setRefreshing(false)
   }
 
   async function remove() {
@@ -96,9 +104,16 @@ export function PropertyPage() {
             )}
           </div>
         </div>
-        <button className="danger" onClick={remove}>
-          Ta bort
-        </button>
+        <div className="row">
+          {property.source_url && (
+            <button onClick={refresh} disabled={refreshing} title="Läser annonsen på nytt. Dina ändringar behålls.">
+              {refreshing ? 'Hämtar …' : 'Hämta annonsen igen'}
+            </button>
+          )}
+          <button className="danger" onClick={remove}>
+            Ta bort
+          </button>
+        </div>
       </div>
 
       {property.retrieval_message && (
@@ -150,13 +165,16 @@ export function PropertyPage() {
       </div>
 
       <section className="card stack">
-        <h2>Mäklarens beskrivning</h2>
+        <div className="spread">
+          <h2>Mäklarens beskrivning</h2>
+          <span className="badge">Påståenden från annonsen</span>
+        </div>
         <p className="small muted">
-          Återges ordagrant. Det är påståenden från annonsen, inte kontrollerade fakta: ”nyrenoverat” säger inget om när
-          eller hur det gjordes. En analys av texten kommer i nästa steg.
+          Återges ordagrant och är inte kontrollerat. ”Nyrenoverat” säger till exempel inget om när eller hur något
+          gjordes. En analys av texten kommer i nästa steg.
         </p>
         {property.description.value ? (
-          <p className="description">{String(property.description.value)}</p>
+          <ListingDescription text={String(property.description.value)} />
         ) : (
           <p className="muted">Ingen beskrivning hittades.</p>
         )}

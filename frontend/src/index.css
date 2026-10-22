@@ -598,9 +598,45 @@ dl.facts dd {
   font-weight: 700;
 }
 
-.description {
-  white-space: pre-line;
-  max-width: 70ch;
+.listing-description {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.listing-description blockquote {
+  margin: 0;
+  padding: 0.25rem 0 0.25rem 1.25rem;
+  border-left: 3px solid var(--border);
+  max-width: 68ch;
+  font-size: 1.02rem;
+  line-height: 1.7;
+  color: var(--text);
+  position: relative;
+}
+
+.listing-description blockquote p {
+  margin: 0 0 1em;
+}
+
+.listing-description blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+.listing-description blockquote p:first-child {
+  font-size: 1.1rem;
+}
+
+/* Fade the last visible lines to show that the text continues. */
+.listing-description blockquote.collapsed::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3em;
+  background: linear-gradient(to bottom, transparent, var(--surface));
 }
 
 textarea {

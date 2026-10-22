@@ -282,7 +282,8 @@ def _find_description(facts: ListingFacts, text: str) -> None:
     paragraphs = [_clean_line(_drop_leading_fragments(p)) for p in re.split(r"\n\s*\n", text)]
     runs: list[list[str]] = [[]]
     for paragraph in paragraphs:
-        if _is_prose(paragraph):
+        # A short sentence such as "Varmt välkommen på visning!" only counts inside a description.
+        if _is_prose(paragraph) or (runs[-1] and _is_short_sentence(paragraph)):
             runs[-1].append(paragraph)
         elif runs[-1]:
             runs.append([])
@@ -298,6 +299,10 @@ def _drop_leading_fragments(paragraph: str) -> str:
     while len(lines) > 1 and not (len(lines[0]) > 40 and lines[0].count(" ") >= 6):
         lines.pop(0)
     return "\n".join(lines)
+
+
+def _is_short_sentence(paragraph: str) -> bool:
+    return 10 <= len(paragraph) <= 60 and paragraph[:1].isupper() and paragraph.endswith((".", "!"))
 
 
 def _is_prose(paragraph: str) -> bool:

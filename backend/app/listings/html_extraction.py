@@ -72,6 +72,11 @@ def extract_from_html(html: str) -> tuple[ListingFacts, str]:
     visible_text = re.sub(r"\n\s*\n+", "\n\n", "".join(parser.text_parts)).strip()
 
     facts = ListingFacts()
+    # The description in the visible text keeps its paragraphs; structured data and meta
+    # tags often hold a shortened single-paragraph copy. Prefer the visible text.
+    text_facts = extract_from_text(visible_text)
+    if "description" in text_facts.fields:
+        facts.fields["description"] = text_facts.fields["description"]
     for block in parser.json_ld:
         try:
             data = json.loads(block)
@@ -80,7 +85,7 @@ def extract_from_html(html: str) -> tuple[ListingFacts, str]:
         for item in _flatten(data):
             _read_structured(facts, item)
     _read_meta(facts, parser.meta, parser.title)
-    facts.merge(extract_from_text(visible_text))
+    facts.merge(text_facts)
     return facts, visible_text
 
 
@@ -128,7 +133,7 @@ def _read_structured(facts: ListingFacts, item: dict) -> None:
     year_built = _number(item.get("yearBuilt"))
     facts.set("construction_year", int(year_built) if year_built and 1500 < year_built < 2100 else None,
               excerpt, _STRUCTURED)
-    facts.set("description", _text(item.get("description"), limit=8000), excerpt, _STRUCTURED)
+    facts.set("description", _text(item.get("description"), limit=8000, keep_paragraphs=True), excerpt, _STRUCTURED)
     facts.set("title", _text(item.get("name")), excerpt, _STRUCTURED)
     posted = item.get("datePosted")
     if isinstance(posted, str) and re.match(r"\d{4}-\d{2}-\d{2}", posted):
@@ -137,14 +142,18 @@ def _read_structured(facts: ListingFacts, item: dict) -> None:
 
 def _read_meta(facts: ListingFacts, meta: dict[str, str], title: str) -> None:
     facts.set("title", _text(meta.get("og:title") or title), "Sidans titel", "meta_tag")
-    facts.set("description", _text(meta.get("og:description") or meta.get("description"), limit=8000),
+    facts.set("description", _text(meta.get("og:description") or meta.get("description"), limit=8000, keep_paragraphs=True),
               "Sidans beskrivning (meta)", "meta_tag")
 
 
-def _text(value: object, limit: int = 300) -> str | None:
+def _text(value: object, limit: int = 300, keep_paragraphs: bool = False) -> str | None:
     if not isinstance(value, str):
         return None
-    cleaned = re.sub(r"\s+", " ", value).strip()
+    if keep_paragraphs:
+        paragraphs = [re.sub(r"\s+", " ", p).strip() for p in re.split(r"\n\s*\n|<br\s*/?>\s*<br\s*/?>", value)]
+        cleaned = "\n\n".join(p for p in paragraphs if p)
+    else:
+        cleaned = re.sub(r"\s+", " ", value).strip()
     return cleaned[:limit] or None
 
 

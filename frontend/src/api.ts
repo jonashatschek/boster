@@ -313,6 +313,7 @@ export const api = {
   addPropertyFromUrl: (url: string) => request<PropertyOverview>('/api/properties/from-url', json('POST', { url })),
   addPropertyFromText: (text: string, url?: string) =>
     request<PropertyOverview>('/api/properties/from-text', json('POST', { text, url: url || undefined })),
+  refreshProperty: (id: number) => request<PropertyOverview>(`/api/properties/${id}/refresh`, { method: 'POST' }),
   addPropertyText: (id: number, text: string) =>
     request<PropertyOverview>(`/api/properties/${id}/text`, json('POST', { text })),
   updateProperty: (id: number, changes: Record<string, PropertyFieldValue>) =>

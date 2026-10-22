@@ -96,6 +96,26 @@ def create_from_url(session: Session, settings: Settings, url: str) -> Property:
     return listing
 
 
+def refresh_from_url(session: Session, settings: Settings, listing: Property) -> None:
+    """Fetch the listing again. Manual values are kept, and a failed fetch keeps the existing data."""
+    if not listing.source_url:
+        raise PropertyError("Bostaden har ingen annonslänk att hämta från.")
+    try:
+        page = fetch_listing_page(listing.source_url, settings.document_download_timeout_seconds)
+    except ListingFetchError as error:
+        listing.retrieval_message = str(error)
+        session.commit()
+        return
+    facts, visible_text = extract_from_html(page.html)
+    _apply_facts(listing, facts, source="Annonssidan")
+    listing.listing_text = visible_text[:200_000]
+    listing.retrieval_status = RetrievalStatus.FETCHED.value
+    listing.retrieved_at = datetime.now(timezone.utc)
+    listing.retrieval_message = _completeness_message(listing)
+    _link_by_name(session, listing)
+    session.commit()
+
+
 def create_from_text(session: Session, text: str, url: str | None = None) -> Property:
     url = url.strip() if url else None
     if url:

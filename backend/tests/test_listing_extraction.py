@@ -204,3 +204,14 @@ def test_agent_address_in_structured_data_is_not_the_apartment():
     assert found["asking_price"] == 1_650_000
     assert found["living_area"] == 27
     assert found["construction_year"] == 1954
+
+
+def test_agent_page_description_keeps_paragraphs_from_visible_text():
+    html = """<script type="application/ld+json">{"@type": "Residence", "description": "Kort sammanfattning."}</script>
+    <div><p>Välkommen till en ljus och välplanerad lägenhet högst upp i huset, med fint läge och utsikt.</p>
+    <p>Lägenheten är smart planerad och erbjuder allt du behöver, med hall, badrum och ett rymligt allrum.</p>
+    <p>Varmt välkommen på visning!</p></div>"""
+    facts, _ = extract_from_html(html)
+    description = facts.fields["description"].value
+    assert description.count("\n\n") == 2
+    assert description.endswith("Varmt välkommen på visning!")

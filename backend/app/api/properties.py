@@ -58,6 +58,18 @@ def add_listing_text(property_id: int, request: PropertyText, session: SessionDe
     return property_service.build_property_overview(session, listing, rules)
 
 
+@router.post("/{property_id}/refresh", response_model=PropertyOverview)
+def refresh_property(property_id: int, session: SessionDep, rules: RulesDep,
+                     settings: Annotated[Settings, Depends(get_settings)]):
+    """Fetch the listing page again. Manual values are kept."""
+    listing = _load(session, property_id)
+    try:
+        property_service.refresh_from_url(session, settings, listing)
+    except PropertyError as error:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+    return property_service.build_property_overview(session, listing, rules)
+
+
 @router.patch("/{property_id}", response_model=PropertyOverview)
 def update_property(property_id: int, update: PropertyUpdate, session: SessionDep, rules: RulesDep):
     listing = _load(session, property_id)
