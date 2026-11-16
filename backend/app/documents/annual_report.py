@@ -12,12 +12,10 @@ from dataclasses import dataclass, field, replace
 from datetime import date
 from enum import StrEnum
 
-import pymupdf
-
 from app.domain.metrics import METRICS, AreaBasis, Unit
 from app.domain.provenance import ExtractionMethod, ValueOrigin
 from app.documents.number_parsing import parse_swedish_number
-from app.documents.pdf_layout import PageLayout, read_layout
+from app.documents.pdf_layout import PageLayout, PageText, read_layout
 from app.documents.period_tables import PeriodTableRow, TextRow, clean_label, read_document_rows
 
 # Pages with less text than this are probably scanned images.
@@ -154,10 +152,8 @@ _TOPICS: list[tuple[str, re.Pattern]] = [
 _MAX_FINDINGS_PER_TOPIC = 8
 
 
-def extract_annual_report(pdf_bytes: bytes) -> AnnualReportExtraction:
-    with pymupdf.open(stream=pdf_bytes, filetype="pdf") as document:
-        pages = read_layout(document)
-    return extract_from_pages(pages)
+def extract_annual_report(pages: list[PageText]) -> AnnualReportExtraction:
+    return extract_from_pages(read_layout(pages))
 
 
 def extract_from_pages(pages: list[PageLayout]) -> AnnualReportExtraction:

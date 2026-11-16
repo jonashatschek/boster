@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { api, ApiError, type CooperativeOverview, type MetricSeries, type YearValue } from '../api'
 import { formatExact, formatValue, METHOD_LABELS } from '../format'
 import { StatusBadge } from './Badges'
+import { DocumentLink } from './DocumentLink'
 
 interface Props {
   cooperativeId: number
@@ -95,10 +96,10 @@ export function ValueDetails({ cooperativeId, metric, yearValue, fiscalYear, met
                   {source.document_id && (
                     <>
                       {' · '}
-                      <a href={api.documentFileUrl(source.document_id, source.page)} target="_blank" rel="noreferrer">
+                      <DocumentLink documentId={source.document_id} page={source.page}>
                         {source.document_name}
                         {source.page ? `, sida ${source.page}` : ''}
-                      </a>
+                      </DocumentLink>
                     </>
                   )}
                 </div>

@@ -5,12 +5,13 @@ from pathlib import Path
 import pytest
 
 from tests.report_factory import make_report_pdf
+from tests.uploads import upload_pdf
 
 SAMPLES = Path(__file__).parents[2] / "sample_documents"
 
 
 def upload(client, content, filename="arsredovisning.pdf"):
-    return client.post("/api/documents/upload", files={"file": (filename, content, "application/pdf")})
+    return upload_pdf(client, content, filename)
 
 
 def series(overview, key):
@@ -144,18 +145,24 @@ def test_rejects_files_that_are_not_pdfs(client):
     assert "PDF" in response.json()["detail"]
 
 
-def test_rejects_urls_to_local_network(client):
-    response = client.post("/api/documents/from-url", json={"url": "http://127.0.0.1:8000/secret.pdf"})
-    assert response.status_code == 422
-    assert "lokala" in response.json()["detail"]
+def test_unreadable_page_text_stores_the_file_but_reports_it(client):
+    document = upload_pdf(client, make_report_pdf(), pages="not json").json()
+    assert document["extraction_status"] == "failed"
+    assert "kunde inte läsas" in document["extraction_messages"][0]
 
 
-def test_document_file_is_served_inline(client):
-    document = upload(client, make_report_pdf()).json()
+def test_page_text_is_validated(client):
+    document = upload_pdf(client, make_report_pdf(), pages='[{"text": "x", "words": [[0, 0, "a", 1, "b"]]}]').json()
+    assert document["extraction_status"] == "failed"
+
+
+def test_document_file_is_served(client):
+    content = make_report_pdf()
+    document = upload(client, content).json()
     response = client.get(f"/api/documents/{document['id']}/file")
     assert response.status_code == 200
     assert response.headers["content-type"] == "application/pdf"
-    assert response.headers["content-disposition"].startswith("inline")
+    assert response.content == content
 
 
 def test_deleting_cooperative_removes_documents_and_files(client, tmp_path):

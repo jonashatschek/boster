@@ -155,10 +155,6 @@ class ManualObservationCreate(BaseModel):
     note: str | None = Field(default=None, max_length=1000)
 
 
-class DocumentFromUrl(BaseModel):
-    url: str = Field(min_length=8, max_length=2000)
-
-
 class DocumentReassign(BaseModel):
     cooperative_id: int
 
@@ -291,10 +287,6 @@ class PropertyListItem(BaseModel):
     cooperative_overall_label: str | None
     retrieval_status: str
     updated_at: datetime
-
-
-class PropertyFromUrl(BaseModel):
-    url: str = Field(min_length=8, max_length=2000)
 
 
 class PropertyFromText(BaseModel):

@@ -8,11 +8,9 @@ from enum import StrEnum
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.config import Settings
 from app.domain.provenance import VerificationStatus
 from app.domain.risk import RiskRules
-from app.listings.fetching import ListingFetchError, fetch_listing_page, source_name, validate_listing_url
-from app.listings.html_extraction import extract_from_html
+from app.listings.sources import InvalidListingUrl, source_name, validate_listing_url
 from app.listings.text_extraction import ListingFacts, extract_from_text
 from app.models import HousingCooperative, Property
 from app.schemas import (
@@ -22,10 +20,11 @@ from app.services.cooperatives import CORE_METRICS, build_overview, list_coopera
 
 
 class RetrievalStatus(StrEnum):
-    FETCHED = "fetched"  # Read from the listing page.
     PASTED = "pasted"  # Read from text pasted by the user.
-    FETCH_FAILED = "fetch_failed"  # The page could not be read; the user needs to paste or type.
     MANUAL = "manual"  # Entered by hand.
+    # Earlier versions fetched listing pages; data imported from them can still have these.
+    FETCHED = "fetched"
+    FETCH_FAILED = "fetch_failed"
 
 
 @dataclass(frozen=True)
@@ -66,62 +65,12 @@ class PropertyError(Exception):
 # --- Creating and updating ------------------------------------------------------------------
 
 
-def create_from_url(session: Session, settings: Settings, url: str) -> Property:
-    """Fetch and analyse a listing. A listing that cannot be fetched is still saved, so the user can paste its text."""
-    url = url.strip()
-    try:
-        validate_listing_url(url)
-    except ListingFetchError as error:
-        raise PropertyError(str(error)) from error
-    existing = session.scalar(select(Property).where(Property.source_url == url))
-    if existing:
-        return existing
-
-    listing = Property(source_url=url, source_name=source_name(url), field_sources={},
-                       retrieval_status=RetrievalStatus.FETCH_FAILED.value)
-    session.add(listing)
-    try:
-        page = fetch_listing_page(url, settings.document_download_timeout_seconds)
-    except ListingFetchError as error:
-        listing.retrieval_message = str(error)
-    else:
-        facts, visible_text = extract_from_html(page.html)
-        _apply_facts(listing, facts, source="Annonssidan")
-        listing.listing_text = visible_text[:200_000]
-        listing.retrieval_status = RetrievalStatus.FETCHED.value
-        listing.retrieved_at = datetime.now(timezone.utc)
-        listing.retrieval_message = _completeness_message(listing)
-    _link_by_name(session, listing)
-    session.commit()
-    return listing
-
-
-def refresh_from_url(session: Session, settings: Settings, listing: Property) -> None:
-    """Fetch the listing again. Manual values are kept, and a failed fetch keeps the existing data."""
-    if not listing.source_url:
-        raise PropertyError("Bostaden har ingen annonslänk att hämta från.")
-    try:
-        page = fetch_listing_page(listing.source_url, settings.document_download_timeout_seconds)
-    except ListingFetchError as error:
-        listing.retrieval_message = str(error)
-        session.commit()
-        return
-    facts, visible_text = extract_from_html(page.html)
-    _apply_facts(listing, facts, source="Annonssidan")
-    listing.listing_text = visible_text[:200_000]
-    listing.retrieval_status = RetrievalStatus.FETCHED.value
-    listing.retrieved_at = datetime.now(timezone.utc)
-    listing.retrieval_message = _completeness_message(listing)
-    _link_by_name(session, listing)
-    session.commit()
-
-
 def create_from_text(session: Session, text: str, url: str | None = None) -> Property:
     url = url.strip() if url else None
     if url:
         try:
             validate_listing_url(url)
-        except ListingFetchError as error:
+        except InvalidListingUrl as error:
             raise PropertyError(str(error)) from error
     listing = Property(source_url=url, source_name=source_name(url) if url else "Inklistrad text",
                        field_sources={}, retrieval_status=RetrievalStatus.PASTED.value)

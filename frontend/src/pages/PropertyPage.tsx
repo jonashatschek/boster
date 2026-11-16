@@ -40,7 +40,6 @@ export function PropertyPage() {
   const [property, setProperty] = useState<PropertyOverview | null>(null)
   const [cooperatives, setCooperatives] = useState<CooperativeListItem[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [refreshing, setRefreshing] = useState(false)
 
   const load = useCallback(() => {
     api
@@ -67,12 +66,6 @@ export function PropertyPage() {
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : 'Något gick fel.')
     }
-  }
-
-  async function refresh() {
-    setRefreshing(true)
-    await act(() => api.refreshProperty(property!.id))
-    setRefreshing(false)
   }
 
   async function remove() {
@@ -105,11 +98,6 @@ export function PropertyPage() {
           </div>
         </div>
         <div className="row">
-          {property.source_url && (
-            <button onClick={refresh} disabled={refreshing} title="Läser annonsen på nytt. Dina ändringar behålls.">
-              {refreshing ? 'Hämtar …' : 'Hämta annonsen igen'}
-            </button>
-          )}
           <button className="danger" onClick={remove}>
             Ta bort
           </button>

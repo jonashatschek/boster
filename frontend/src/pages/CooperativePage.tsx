@@ -11,6 +11,7 @@ import {
   type YearValue,
 } from '../api'
 import { ConcernBadge } from '../components/Badges'
+import { DocumentLink } from '../components/DocumentLink'
 import { DocumentUploader } from '../components/DocumentUploader'
 import { MetricChart } from '../components/MetricChart'
 import { ValueDetails } from '../components/ValueDetails'
@@ -117,7 +118,7 @@ export function CooperativePage() {
         <p className="small muted">{risk.disclaimer}</p>
         <details>
           <summary>Hur den samlade bedömningen görs</summary>
-          <p className="small">{risk.overall_rule} Gränserna kan ändras i backend/config/risk_rules.toml.</p>
+          <p className="small">{risk.overall_rule} Gränserna står i backend/config/risk_rules.toml i källkoden.</p>
         </details>
         <div className="risk-grid">
           {risk.indicators.map((indicator) => (
@@ -435,9 +436,9 @@ function Findings({ overview }: { overview: CooperativeOverview }) {
               .map((finding, index) => (
                 <li key={index}>
                   ”{finding.excerpt}”{' '}
-                  <a href={api.documentFileUrl(finding.document_id, finding.page)} target="_blank" rel="noreferrer">
+                  <DocumentLink documentId={finding.document_id} page={finding.page}>
                     s. {finding.page}
-                  </a>
+                  </DocumentLink>
                 </li>
               ))}
           </ul>
@@ -481,9 +482,7 @@ function DocumentRow({
   return (
     <li className="stack" style={{ gap: '0.35rem' }}>
       <div className="spread">
-        <a href={api.documentFileUrl(document.id)} target="_blank" rel="noreferrer">
-          {document.original_filename}
-        </a>
+        <DocumentLink documentId={document.id}>{document.original_filename}</DocumentLink>
         <span className={`badge ${statusClass}`}>{EXTRACTION_STATUS_LABELS[document.extraction_status]}</span>
       </div>
       <div className="small muted">

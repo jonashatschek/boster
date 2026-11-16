@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from tests.report_factory import DEFAULT_STATEMENTS, make_report_pdf
+from tests.uploads import upload_pdf
 
 SAMPLES = Path(__file__).parents[2] / "sample_documents"
 
@@ -18,7 +19,7 @@ LOW_DEBT_KEY_FIGURES = [
 
 def add_cooperative(client, **report) -> int:
     content = make_report_pdf(**report)
-    response = client.post("/api/documents/upload", files={"file": ("rapport.pdf", content, "application/pdf")})
+    response = upload_pdf(client, content, "rapport.pdf")
     assert response.status_code == 201, response.text
     return response.json()["cooperative_id"]
 
@@ -128,7 +129,7 @@ def test_real_reports(client):
     paths = [SAMPLES / "soderbysjon_arsredovisning.pdf", SAMPLES / "friheten_arsredovisning_2024-2025.pdf"]
     if not all(path.exists() for path in paths):
         pytest.skip("Sample documents not downloaded")
-    ids = [client.post("/api/documents/upload", files={"file": (p.name, p.read_bytes(), "application/pdf")})
+    ids = [upload_pdf(client, p.read_bytes(), p.name)
            .json()["cooperative_id"] for p in paths]
     comparison = compare(client, *ids).json()
     assert [c["value"] for c in row(comparison, "debt_per_sqm_total_area")["cells"]] == [3_613, 1_906]

@@ -1,31 +1,31 @@
-"""Application settings, read from environment variables or backend/.env."""
+"""Application settings.
+
+The app runs in the visitor's browser (see app/browser.py), so there is no server
+to hold secrets: settings are plain values, not read from the environment.
+"""
 
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import SecretStr
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import BaseModel
 
 BACKEND_DIRECTORY = Path(__file__).parents[1]
 
 
-class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=BACKEND_DIRECTORY / ".env", extra="ignore")
-
+class Settings(BaseModel):
     data_directory: Path = BACKEND_DIRECTORY / "data"
     risk_rules_path: Path = BACKEND_DIRECTORY / "config" / "risk_rules.toml"
     max_document_bytes: int = 60 * 1024 * 1024
-    document_download_timeout_seconds: float = 30.0
-    # Origins allowed to call the API from a browser (the Vite dev server).
-    cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    # An imported backup may hold many PDFs; this caps its unpacked size.
+    max_backup_bytes: int = 2 * 1024 * 1024 * 1024
 
-    # SecretStr keeps keys out of logs and error messages.
-    trafiklab_api_key: SecretStr | None = None
-    anthropic_api_key: SecretStr | None = None
+    @property
+    def database_path(self) -> Path:
+        return self.data_directory / "boster.db"
 
     @property
     def database_url(self) -> str:
-        return f"sqlite:///{self.data_directory / 'boster.db'}"
+        return f"sqlite:///{self.database_path}"
 
     @property
     def document_directory(self) -> Path:

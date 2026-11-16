@@ -1,4 +1,6 @@
 import { Link, Route, Routes } from 'react-router-dom'
+import { DataMenu } from './components/DataMenu'
+import { StartupNotice } from './components/StartupNotice'
 import { ComparisonPage } from './pages/ComparisonPage'
 import { CooperativePage } from './pages/CooperativePage'
 import { Dashboard } from './pages/Dashboard'
@@ -13,9 +15,11 @@ export default function App() {
             Boster
           </Link>
           <span className="muted small">Analys av bostadsrätter och föreningar</span>
+          <DataMenu />
         </div>
       </header>
       <main className="page">
+        <StartupNotice />
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/foreningar/:id" element={<CooperativePage />} />

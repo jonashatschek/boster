@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from app.documents.annual_report import DocumentType, LandTenure, extract_annual_report
+from app.documents.pymupdf_text import read_pages
 from app.domain.kpis import values_agree
 
 SAMPLES = Path(__file__).parents[2] / "sample_documents"
@@ -21,7 +22,7 @@ def extraction_of(filename):
     path = SAMPLES / filename
     if not path.exists():
         pytest.skip(f"Sample document {filename} not downloaded")
-    return extract_annual_report(path.read_bytes())
+    return extract_annual_report(read_pages(path.read_bytes()))
 
 
 def figure(extraction, metric_key, fiscal_year, method_prefix="pdf_"):

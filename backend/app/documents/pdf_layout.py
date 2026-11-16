@@ -9,8 +9,6 @@ Tables can then be read by matching cells to column headers by position.
 
 from dataclasses import dataclass, field
 
-import pymupdf
-
 from app.documents.number_parsing import is_empty_cell, is_thousands_group, parse_swedish_number
 
 # Words whose vertical centres differ by less than this many points share a row.
@@ -59,19 +57,49 @@ class Row:
 class PageLayout:
     page_number: int
     rows: list[Row]
-    text: str  # Plain text in PyMuPDF reading order, used for running-text patterns.
+    text: str  # Plain text in reading order, used for running-text patterns.
 
 
-def read_layout(document: pymupdf.Document) -> list[PageLayout]:
+@dataclass
+class PageText:
+    """The raw text of one page, as read by a PDF library.
+
+    In the browser this comes from pdf.js (frontend/src/pdf/pageText.ts); in tests
+    and scripts it comes from PyMuPDF (app/documents/pymupdf_text.py).
+    """
+
+    text: str  # Plain text in reading order.
+    words: list[tuple[float, float, float, float, str]]  # (x0, y0, x1, y1, text), origin top left.
+
+
+def pages_from_json(data: object) -> list[PageText]:
+    """Validate page text sent by the browser: a list of {"text": str, "words": [[x0, y0, x1, y1, str], ...]}."""
+    if not isinstance(data, list):
+        raise ValueError("Expected a list of pages.")
+    pages = []
+    for page in data:
+        if not isinstance(page, dict) or not isinstance(page.get("text"), str) or not isinstance(page.get("words"), list):
+            raise ValueError("Each page needs text and words.")
+        words = []
+        for word in page["words"]:
+            if not (isinstance(word, list) and len(word) == 5 and isinstance(word[4], str)
+                    and all(isinstance(v, (int, float)) for v in word[:4])):
+                raise ValueError("Each word is [x0, y0, x1, y1, text].")
+            words.append((float(word[0]), float(word[1]), float(word[2]), float(word[3]), word[4]))
+        pages.append(PageText(text=page["text"], words=words))
+    return pages
+
+
+def read_layout(pages: list[PageText]) -> list[PageLayout]:
     return [
-        PageLayout(page_number=index + 1, rows=_rows_for_page(page, index + 1), text=page.get_text())
-        for index, page in enumerate(document)
+        PageLayout(page_number=index + 1, rows=_rows_for_page(page.words, index + 1), text=page.text)
+        for index, page in enumerate(pages)
     ]
 
 
-def _rows_for_page(page: pymupdf.Page, page_number: int) -> list[Row]:
-    # Each word is (x0, y0, x1, y1, text, block, line, word_index).
-    words = [w for w in page.get_text("words") if w[4].strip()]
+def _rows_for_page(page_words: list[tuple], page_number: int) -> list[Row]:
+    # Each word is (x0, y0, x1, y1, text).
+    words = [w for w in page_words if w[4].strip()]
     words.sort(key=lambda w: ((w[1] + w[3]) / 2, w[0]))
 
     grouped: list[list[tuple]] = []

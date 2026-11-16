@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "pdfjs-dist": "6.5.438",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-router-dom": "^7.18.4",
@@ -21,6 +22,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
     "oxlint": "^1.88.0",
+    "pyodide": "314.0.8",
     "typescript": "~6.0.3",
     "vite": "^8.3.4"
   }

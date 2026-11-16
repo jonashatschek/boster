@@ -1,13 +1,14 @@
+import json
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, Form, HTTPException, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_session, get_settings
 from app.config import Settings
+from app.documents.pdf_layout import pages_from_json
 from app.models import HousingCooperative, SourceDocument
-from app.schemas import DocumentFromUrl, DocumentReassign, DocumentSummary
+from app.schemas import DocumentReassign, DocumentSummary
 from app.services import documents as document_service
 from app.services.documents import DocumentError
 
@@ -18,19 +19,16 @@ SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 
 @router.post("/upload", response_model=DocumentSummary, status_code=status.HTTP_201_CREATED)
-async def upload_document(file: UploadFile, session: SessionDep, settings: SettingsDep):
+async def upload_document(file: UploadFile, pages: Annotated[str, Form()], session: SessionDep,
+                          settings: SettingsDep):
+    """Store a PDF. `pages` is the text of each page as read by pdf.js in the browser (see pdf_layout.PageText)."""
     content = await file.read(settings.max_document_bytes + 1)
     try:
-        return document_service.ingest_pdf(session, settings, content, file.filename or "dokument.pdf")
-    except DocumentError as error:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
-
-
-@router.post("/from-url", response_model=DocumentSummary, status_code=status.HTTP_201_CREATED)
-def add_document_from_url(request: DocumentFromUrl, session: SessionDep, settings: SettingsDep):
+        page_text = pages_from_json(json.loads(pages))
+    except ValueError:  # Includes json.JSONDecodeError.
+        page_text = None  # Stored, but reported as unreadable.
     try:
-        content, filename = document_service.download_pdf(settings, request.url)
-        return document_service.ingest_pdf(session, settings, content, filename, document_url=request.url)
+        return document_service.ingest_pdf(session, settings, content, file.filename or "dokument.pdf", page_text)
     except DocumentError as error:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
 
@@ -45,10 +43,8 @@ def get_document_file(document_id: int, session: SessionDep, settings: SettingsD
     document = _get_document(session, document_id)
     path = document_service.document_path(settings, document)
     if not path.exists():
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Filen saknas på disken.")
-    # Shown inline so that links like /file#page=7 open the right page in the browser's PDF viewer.
-    return FileResponse(path, media_type="application/pdf", filename=document.original_filename,
-                        content_disposition_type="inline")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Filen saknas.")
+    return Response(path.read_bytes(), media_type="application/pdf")
 
 
 @router.patch("/{document_id}", response_model=DocumentSummary)

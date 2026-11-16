@@ -1,9 +1,12 @@
-"""FastAPI application. Run with: uvicorn app.main:create_app --factory --reload"""
+"""FastAPI application.
+
+In production it runs inside the visitor's browser with Pyodide (see app/browser.py).
+Tests call it with FastAPI's TestClient.
+"""
 
 from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import comparisons, cooperatives, documents, properties
+from app.api import backup, comparisons, cooperatives, documents, properties
 from app.config import Settings, get_settings
 from app.db import Database
 from app.domain.risk import load_risk_rules
@@ -21,15 +24,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.database = database
     app.state.risk_rules = load_risk_rules(settings.risk_rules_path)
 
-    app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_methods=["*"], allow_headers=["*"])
     app.include_router(documents.router)
     app.include_router(cooperatives.router)
     app.include_router(comparisons.router)
     app.include_router(properties.router)
+    app.include_router(backup.router)
 
     @app.get("/api/health")
     def health():
         return {"status": "ok"}
 
     return app
-

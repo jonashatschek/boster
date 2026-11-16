@@ -2,10 +2,9 @@ from datetime import date
 
 import pytest
 
-from app.listings.html_extraction import extract_from_html
 from app.listings.text_extraction import extract_from_text
 from app.services.properties import normalize_cooperative_name
-from tests.listing_samples import AGENT_HTML, AGENT_STYLE, BOOLI_STYLE, HEMNET_STYLE
+from tests.listing_samples import AGENT_STYLE, BOOLI_STYLE, HEMNET_STYLE
 
 
 def values(facts):
@@ -89,25 +88,6 @@ def test_prose_starting_with_a_label_word_is_not_a_label():
     assert "cooperative_name" not in facts
 
 
-def test_html_structured_data_and_visible_text():
-    facts, visible_text = extract_from_html(AGENT_HTML)
-    found = values(facts)
-    assert found["asking_price"] == 2_995_000
-    assert found["living_area"] == 71
-    assert found["rooms"] == 3
-    assert found["address"] == "Storgatan 3A"
-    assert found["monthly_fee"] == 4_102
-    assert found["construction_year"] == 1953
-    assert found["cooperative_name"] == "Bostadsrättsförening Friheten Bagarmossen"
-    assert facts.fields["asking_price"].method == "structured_data"
-
-
-def test_html_scripts_are_ignored():
-    facts, visible_text = extract_from_html(AGENT_HTML)
-    assert "alert" not in visible_text
-    assert values(facts)["monthly_fee"] == 4_102  # Not the "1 kr/mån" inside the script.
-
-
 @pytest.mark.parametrize(
     ("name", "normalized"),
     [
@@ -188,30 +168,3 @@ def test_cooperative_name_from_link_text_is_trimmed():
     facts = extract_from_text("Dokument\nBrf Gästfriheten - Årsredovisning 2024\nStadgar\n")
     assert facts.fields["cooperative_name"].value == "Brf Gästfriheten"
     assert "Kontrollera" in facts.fields["cooperative_name"].note
-
-
-def test_agent_address_in_structured_data_is_not_the_apartment():
-    html = """<script type="application/ld+json">
-    {"@type": "RealEstateListing", "product": {"@type": "Product",
-      "seller": {"@type": "RealEstateAgent", "address": {"@type": "PostalAddress", "streetAddress": "Mäklargatan 1"}},
-      "offers": {"@type": "Offer", "price": "1650000", "priceCurrency": "SEK"},
-      "isRelatedTo": {"@type": "Residence", "address": {"@type": "PostalAddress", "streetAddress": "Rusthållarvägen 151"},
-                      "floorSize": {"@type": "QuantitativeValue", "value": "27"}, "numberOfRooms": "1", "yearBuilt": 1954}}}
-    </script>"""
-    facts, _ = extract_from_html(html)
-    found = values(facts)
-    assert found["address"] == "Rusthållarvägen 151"
-    assert found["asking_price"] == 1_650_000
-    assert found["living_area"] == 27
-    assert found["construction_year"] == 1954
-
-
-def test_agent_page_description_keeps_paragraphs_from_visible_text():
-    html = """<script type="application/ld+json">{"@type": "Residence", "description": "Kort sammanfattning."}</script>
-    <div><p>Välkommen till en ljus och välplanerad lägenhet högst upp i huset, med fint läge och utsikt.</p>
-    <p>Lägenheten är smart planerad och erbjuder allt du behöver, med hall, badrum och ett rymligt allrum.</p>
-    <p>Varmt välkommen på visning!</p></div>"""
-    facts, _ = extract_from_html(html)
-    description = facts.fields["description"].value
-    assert description.count("\n\n") == 2
-    assert description.endswith("Varmt välkommen på visning!")

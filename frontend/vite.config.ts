@@ -1,13 +1,14 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
-// During development, API calls are forwarded to the FastAPI backend.
-// Set BOSTER_API_URL to use a backend on another address.
+// Boster is a static site: the Python backend runs in the browser (src/python/worker.ts),
+// which bundles the files in ../backend at build time.
 export default defineConfig({
   plugins: [react()],
+  // Relative paths, so the site works from any folder (e.g. https://<user>.github.io/boster/).
+  base: './',
+  worker: { format: 'es' },
   server: {
-    proxy: {
-      '/api': process.env.BOSTER_API_URL ?? 'http://127.0.0.1:8000',
-    },
+    fs: { allow: ['..'] },
   },
 })

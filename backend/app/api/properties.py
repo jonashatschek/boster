@@ -3,12 +3,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_risk_rules, get_session, get_settings
-from app.config import Settings
+from app.api.dependencies import get_risk_rules, get_session
 from app.domain.risk import RiskRules
 from app.models import HousingCooperative, Property
 from app.schemas import (
-    PropertyCooperativeLink, PropertyFromText, PropertyFromUrl, PropertyListItem, PropertyOverview, PropertyText,
+    PropertyCooperativeLink, PropertyFromText, PropertyListItem, PropertyOverview, PropertyText,
     PropertyUpdate,
 )
 from app.services import properties as property_service
@@ -23,17 +22,6 @@ RulesDep = Annotated[RiskRules, Depends(get_risk_rules)]
 @router.get("", response_model=list[PropertyListItem])
 def list_properties(session: SessionDep, rules: RulesDep):
     return property_service.list_properties(session, rules)
-
-
-@router.post("/from-url", response_model=PropertyOverview, status_code=status.HTTP_201_CREATED)
-def add_from_url(request: PropertyFromUrl, session: SessionDep, rules: RulesDep,
-                 settings: Annotated[Settings, Depends(get_settings)]):
-    """Fetch a listing. If the site refuses, the property is still created with an explanation."""
-    try:
-        listing = property_service.create_from_url(session, settings, request.url)
-    except PropertyError as error:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
-    return property_service.build_property_overview(session, listing, rules)
 
 
 @router.post("/from-text", response_model=PropertyOverview, status_code=status.HTTP_201_CREATED)
@@ -55,18 +43,6 @@ def add_listing_text(property_id: int, request: PropertyText, session: SessionDe
     """Analyse pasted listing text for an existing property. Manual values are kept."""
     listing = _load(session, property_id)
     property_service.apply_text(session, listing, request.text)
-    return property_service.build_property_overview(session, listing, rules)
-
-
-@router.post("/{property_id}/refresh", response_model=PropertyOverview)
-def refresh_property(property_id: int, session: SessionDep, rules: RulesDep,
-                     settings: Annotated[Settings, Depends(get_settings)]):
-    """Fetch the listing page again. Manual values are kept."""
-    listing = _load(session, property_id)
-    try:
-        property_service.refresh_from_url(session, settings, listing)
-    except PropertyError as error:
-        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
     return property_service.build_property_overview(session, listing, rules)
 
 

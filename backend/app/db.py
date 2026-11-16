@@ -1,4 +1,4 @@
-"""Database engine and session handling (SQLite for local use)."""
+"""Database engine and session handling (SQLite, stored in the visitor's browser)."""
 
 from collections.abc import Iterator
 
@@ -38,8 +38,9 @@ class Database:
     def _add_missing_columns(self) -> None:
         """Add nullable columns introduced after a table was created.
 
-        A minimal stand-in for migrations while the app runs locally. It only adds
-        columns; it never changes or drops anything. Use Alembic before hosting.
+        A minimal stand-in for migrations. Each visitor's database lives in their
+        browser and may come from an older version of the app, or from an older
+        export. It only adds columns; it never changes or drops anything.
         """
         inspector = inspect(self.engine)
         with self.engine.begin() as connection:

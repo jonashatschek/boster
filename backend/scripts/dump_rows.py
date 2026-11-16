@@ -6,15 +6,13 @@ Usage: python -m scripts.dump_rows path/to/report.pdf 9 10 11
 import sys
 from pathlib import Path
 
-import pymupdf
-
 from app.documents.pdf_layout import read_layout
+from app.documents.pymupdf_text import read_pages
 from app.documents.period_tables import PeriodTableRow, read_document_rows
 
 
 def main(path: str, page_numbers: list[int]) -> None:
-    with pymupdf.open(stream=Path(path).read_bytes(), filetype="pdf") as document:
-        pages = read_layout(document)
+    pages = read_layout(read_pages(Path(path).read_bytes()))
     for row in read_document_rows([pages[n - 1] for n in page_numbers]):
         if isinstance(row, PeriodTableRow):
             print(f"p{row.page_number} TABLE {row.label!r} {row.values} unassigned={row.unassigned_numbers}")

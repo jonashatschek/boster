@@ -67,23 +67,3 @@ Byggnadsår: 1953
 Förening: Bostadsrättsförening Friheten Bagarmossen
 Energiklass: C
 """
-
-AGENT_HTML = """<!doctype html>
-<html><head>
-<title>Storgatan 3A | Mäklarbyrån</title>
-<meta property="og:title" content="Storgatan 3A, Bagarmossen">
-<meta property="og:description" content="Charmig trea med uteplats.">
-<script type="application/ld+json">
-{"@context": "https://schema.org", "@type": "Apartment", "name": "Storgatan 3A",
- "address": {"@type": "PostalAddress", "streetAddress": "Storgatan 3A", "addressLocality": "Stockholm"},
- "floorSize": {"@type": "QuantitativeValue", "value": 71, "unitCode": "MTK"},
- "numberOfRooms": 3,
- "offers": {"@type": "Offer", "price": 2995000, "priceCurrency": "SEK"}}
-</script>
-<script>alert("this must never run"); var avgift = "Avgift: 1 kr/mån";</script>
-</head><body>
-<div><span>Månadsavgift</span><span>4 102 kr</span></div>
-<div><span>Byggnadsår</span><span>1953</span></div>
-<div><span>Förening</span><span>Bostadsrättsförening Friheten Bagarmossen</span></div>
-</body></html>
-"""

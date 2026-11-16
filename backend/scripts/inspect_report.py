@@ -8,11 +8,12 @@ from collections import defaultdict
 from pathlib import Path
 
 from app.documents.annual_report import extract_annual_report
+from app.documents.pymupdf_text import read_pages
 
 
 def main(paths: list[str]) -> None:
     for path in paths:
-        extraction = extract_annual_report(Path(path).read_bytes())
+        extraction = extract_annual_report(read_pages(Path(path).read_bytes()))
         print(f"\n######## {Path(path).name}")
         print(f"type={extraction.document_type} org={extraction.organisation_number} name={extraction.cooperative_name!r}")
         print(f"fiscal year={extraction.fiscal_year} period={extraction.fiscal_period_start}..{extraction.fiscal_period_end}")

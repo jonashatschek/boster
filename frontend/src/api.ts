@@ -1,3 +1,6 @@
+import { readPageText, type PageText } from './pdf/pageText'
+import { pythonFetch } from './python/client'
+
 // Typed client for the Boster backend. Types mirror backend/app/schemas.py.
 
 export type VerificationStatus =
@@ -268,12 +271,13 @@ export interface PropertyListItem {
 
 export class ApiError extends Error {}
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function send(path: string, init?: RequestInit): Promise<Response> {
   let response: Response
   try {
-    response = await fetch(path, init)
-  } catch {
-    throw new ApiError('Kunde inte nå servern. Kontrollera att backend körs.')
+    response = await pythonFetch(path, init)
+  } catch (caught) {
+    console.error(caught)
+    throw new ApiError('Något gick fel i webbläsaren. Ladda om sidan och försök igen.')
   }
   if (!response.ok) {
     let message = `Något gick fel (HTTP ${response.status}).`
@@ -286,6 +290,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new ApiError(message)
   }
+  return response
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await send(path, init)
   if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
 }
@@ -310,10 +319,8 @@ export const api = {
     request<CooperativeComparison>(`/api/comparisons/cooperatives?ids=${ids.join(',')}`),
   listProperties: () => request<PropertyListItem[]>('/api/properties'),
   getProperty: (id: number) => request<PropertyOverview>(`/api/properties/${id}`),
-  addPropertyFromUrl: (url: string) => request<PropertyOverview>('/api/properties/from-url', json('POST', { url })),
   addPropertyFromText: (text: string, url?: string) =>
     request<PropertyOverview>('/api/properties/from-text', json('POST', { text, url: url || undefined })),
-  refreshProperty: (id: number) => request<PropertyOverview>(`/api/properties/${id}/refresh`, { method: 'POST' }),
   addPropertyText: (id: number, text: string) =>
     request<PropertyOverview>(`/api/properties/${id}/text`, json('POST', { text })),
   updateProperty: (id: number, changes: Record<string, PropertyFieldValue>) =>
@@ -324,15 +331,29 @@ export const api = {
     request<PropertyOverview>(`/api/properties/${id}/cooperative`, json('PUT', { cooperative_id: cooperativeId })),
   deleteProperty: (id: number) => request<void>(`/api/properties/${id}`, { method: 'DELETE' }),
   listMetrics: () => request<MetricDefinition[]>('/api/metrics'),
-  uploadDocument: (file: File) => {
+  uploadDocument: async (file: File) => {
+    let pages: PageText[] | null = null
+    try {
+      pages = await readPageText(await file.arrayBuffer())
+    } catch {
+      // Damaged or encrypted: the file is stored, and the document is reported as unreadable.
+    }
     const form = new FormData()
     form.append('file', file)
+    form.append('pages', JSON.stringify(pages))
     return request<DocumentSummary>('/api/documents/upload', { method: 'POST', body: form })
   },
-  addDocumentFromUrl: (url: string) => request<DocumentSummary>('/api/documents/from-url', json('POST', { url })),
   moveDocument: (documentId: number, cooperativeId: number) =>
     request<DocumentSummary>(`/api/documents/${documentId}`, json('PATCH', { cooperative_id: cooperativeId })),
   deleteDocument: (documentId: number) => request<void>(`/api/documents/${documentId}`, { method: 'DELETE' }),
-  documentFileUrl: (documentId: number, page?: number | null) =>
-    `/api/documents/${documentId}/file${page ? `#page=${page}` : ''}`,
+  /** The stored PDF as a link the browser can open (an object URL for this tab only). */
+  documentFileUrl: async (documentId: number) => {
+    const response = await send(`/api/documents/${documentId}/file`)
+    return URL.createObjectURL(new Blob([await response.arrayBuffer()], { type: 'application/pdf' }))
+  },
+  /** All data as a zip file. */
+  exportData: async () => (await send('/api/backup')).blob(),
+  /** Replace all data with an exported zip file. */
+  importData: (file: File) =>
+    request<void>('/api/backup', { method: 'POST', headers: { 'Content-Type': 'application/zip' }, body: file }),
 }

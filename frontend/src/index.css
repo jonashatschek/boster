@@ -112,9 +112,23 @@ p {
 
 .app-header-inner {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 1.5rem;
-  height: 56px;
+  gap: 0.5rem 1.5rem;
+  min-height: 56px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.data-menu {
+  margin-left: auto;
+}
+
+@media (max-width: 720px) {
+  .app-header-inner > .muted,
+  .data-menu > span {
+    display: none;
+  }
 }
 
 .brand {

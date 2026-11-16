@@ -1,28 +1,24 @@
-import { useRef, useState, type DragEvent, type FormEvent } from 'react'
+import { useRef, useState, type DragEvent } from 'react'
 import { api, ApiError, type DocumentSummary } from '../api'
 
 interface Props {
   onAdded: (document: DocumentSummary) => void
 }
 
-/** Add a cooperative document by drag and drop, file picker or link. */
+/** Add a cooperative document by drag and drop or file picker. */
 export function DocumentUploader({ onAdded }: Props) {
   const fileInput = useRef<HTMLInputElement>(null)
   const [dragging, setDragging] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [url, setUrl] = useState('')
 
-  /** Returns true when the document was added. */
-  async function run(description: string, action: () => Promise<DocumentSummary>): Promise<boolean> {
+  async function run(description: string, action: () => Promise<DocumentSummary>) {
     setBusy(description)
     setError(null)
     try {
       onAdded(await action())
-      return true
     } catch (caught) {
       setError(caught instanceof ApiError ? caught.message : 'Något gick fel.')
-      return false
     } finally {
       setBusy(null)
     }
@@ -44,14 +40,6 @@ export function DocumentUploader({ onAdded }: Props) {
     uploadFiles(event.dataTransfer.files)
   }
 
-  function onSubmitUrl(event: FormEvent) {
-    event.preventDefault()
-    if (!url.trim()) return
-    run('Hämtar och analyserar dokumentet …', () => api.addDocumentFromUrl(url.trim())).then((added) => {
-      if (added) setUrl('')
-    })
-  }
-
   return (
     <div className="stack">
       <div
@@ -69,6 +57,7 @@ export function DocumentUploader({ onAdded }: Props) {
       >
         <strong>Släpp en PDF här</strong>
         <div className="muted small">eller klicka för att välja fil – årsredovisning, ekonomisk plan m.m.</div>
+        <div className="muted small">Filen läses här i webbläsaren och laddas inte upp någonstans.</div>
         <input
           ref={fileInput}
           type="file"
@@ -80,18 +69,6 @@ export function DocumentUploader({ onAdded }: Props) {
           }}
         />
       </div>
-      <form className="input-row" onSubmit={onSubmitUrl}>
-        <input
-          type="url"
-          placeholder="…eller klistra in en länk till en PDF"
-          value={url}
-          onChange={(event) => setUrl(event.target.value)}
-          aria-label="Länk till dokument"
-        />
-        <button type="submit" disabled={!!busy || !url.trim()}>
-          Hämta
-        </button>
-      </form>
       {busy && <div className="notice">{busy}</div>}
       {error && <div className="notice error">{error}</div>}
     </div>

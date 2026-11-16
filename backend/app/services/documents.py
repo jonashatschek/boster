@@ -1,25 +1,23 @@
 """Receiving, storing and analysing cooperative documents.
 
-Uploaded files and downloaded documents are untrusted input. We only accept PDFs,
-limit their size, never execute anything inside them, and treat their text purely
-as data.
+Uploaded files are untrusted input. We only accept PDFs, limit their size, never
+execute anything inside them, and treat their text purely as data. The PDF is read
+by pdf.js in the browser; this module receives its text page by page.
 """
 
 import hashlib
 from enum import StrEnum
 from pathlib import Path
-from urllib.parse import unquote, urlparse
 
-import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.documents.annual_report import AnnualReportExtraction, DocumentType, extract_annual_report
+from app.documents.pdf_layout import PageText
 from app.domain.metrics import METRICS
 from app.domain.provenance import VerificationStatus
 from app.models import DocumentFinding, FinancialObservation, HousingCooperative, SourceDocument
-from app.net_safety import UnsafeUrlError, check_public_http_url, reject_private_host
 from app.services.properties import link_matching_properties
 
 
@@ -38,8 +36,11 @@ _PDF_MAGIC = b"%PDF-"
 
 
 def ingest_pdf(session: Session, settings: Settings, content: bytes, filename: str,
-               document_url: str | None = None) -> SourceDocument:
-    """Store and analyse a PDF. Returns the existing document if the same file was uploaded before."""
+               pages: list[PageText] | None) -> SourceDocument:
+    """Store and analyse a PDF. Returns the existing document if the same file was uploaded before.
+
+    `pages` is None when the browser could not read the PDF; the file is then stored but not analysed.
+    """
     if len(content) > settings.max_document_bytes:
         raise DocumentError(f"Filen är för stor (max {settings.max_document_bytes // (1024 * 1024)} MB).")
     if not content.startswith(_PDF_MAGIC):
@@ -55,14 +56,16 @@ def ingest_pdf(session: Session, settings: Settings, content: bytes, filename: s
     (settings.document_directory / file_name).write_bytes(content)
 
     document = SourceDocument(
-        original_filename=_safe_filename(filename), document_url=document_url, sha256=sha256,
+        original_filename=_safe_filename(filename), sha256=sha256,
         file_name=file_name, document_type=DocumentType.OTHER.value,
         extraction_status=ExtractionStatus.FAILED.value, extraction_messages=[],
     )
     session.add(document)
 
     try:
-        extraction = extract_annual_report(content)
+        if pages is None:
+            raise ValueError("No page text.")
+        extraction = extract_annual_report(pages)
     except Exception:  # A malformed PDF must not take the application down.
         document.extraction_messages = ["Dokumentet kunde inte läsas. Filen kan vara skadad eller krypterad."]
         session.commit()
@@ -71,38 +74,6 @@ def ingest_pdf(session: Session, settings: Settings, content: bytes, filename: s
     _apply_extraction(session, document, extraction)
     session.commit()
     return document
-
-
-def download_pdf(settings: Settings, url: str) -> tuple[bytes, str]:
-    """Download a PDF from a public URL. Returns (content, filename)."""
-    try:
-        check_public_http_url(url)
-    except UnsafeUrlError as error:
-        raise DocumentError(str(error)) from error
-
-    try:
-        with httpx.Client(timeout=settings.document_download_timeout_seconds, follow_redirects=True) as client:
-            with client.stream("GET", url, headers={"User-Agent": "Boster/0.1 (personal use)"}) as response:
-                if response.status_code in (401, 403):
-                    raise DocumentError("Sidan kräver inloggning eller nekar åtkomst. Ladda ner filen och ladda upp den här.")
-                if response.status_code >= 400:
-                    raise DocumentError(f"Dokumentet kunde inte hämtas (HTTP {response.status_code}).")
-                try:
-                    reject_private_host(response.url.host)  # After redirects.
-                except UnsafeUrlError as error:
-                    raise DocumentError(str(error)) from error
-                content = bytearray()
-                for chunk in response.iter_bytes():
-                    content += chunk
-                    if len(content) > settings.max_document_bytes:
-                        raise DocumentError("Dokumentet är för stort.")
-    except httpx.TimeoutException as error:
-        raise DocumentError("Det tog för lång tid att hämta dokumentet. Försök igen eller ladda upp filen.") from error
-    except httpx.HTTPError as error:
-        raise DocumentError("Dokumentet kunde inte hämtas. Kontrollera länken.") from error
-
-    filename = unquote(Path(urlparse(str(response.url)).path).name) or "dokument.pdf"
-    return bytes(content), filename
 
 
 def reassign_document(session: Session, document: SourceDocument, cooperative: HousingCooperative) -> None:

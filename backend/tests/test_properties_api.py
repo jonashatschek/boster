@@ -1,28 +1,10 @@
-"""Properties through the API: import from URL or text, corrections, cooperative linking."""
+"""Properties through the API: import from pasted text, corrections, cooperative linking."""
 
 import pytest
 
-from app.listings import fetching
-from app.listings.fetching import FetchedPage, ListingFetchError
-from app.services import properties as property_service
-from tests.listing_samples import AGENT_HTML, BOOLI_STYLE, HEMNET_STYLE
+from tests.listing_samples import BOOLI_STYLE, HEMNET_STYLE
 from tests.report_factory import make_report_pdf
-
-
-@pytest.fixture(autouse=True)
-def no_network(monkeypatch):
-    """URL validation resolves hostnames; keep tests offline and deterministic."""
-    monkeypatch.setattr(property_service, "validate_listing_url", lambda url: None)
-
-
-def blocked_site(monkeypatch):
-    def fetch(url, timeout_seconds):
-        raise ListingFetchError("Hemnet tillåter inte automatisk hämtning av annonsen (HTTP 403). " + fetching.PASTE_ADVICE)
-    monkeypatch.setattr(property_service, "fetch_listing_page", fetch)
-
-
-def agent_site(monkeypatch):
-    monkeypatch.setattr(property_service, "fetch_listing_page", lambda url, timeout_seconds: FetchedPage(url, AGENT_HTML))
+from tests.uploads import upload_pdf
 
 
 def field(overview, key):
@@ -35,47 +17,29 @@ def derived(overview, key):
 
 def add_cooperative(client, **report):
     content = make_report_pdf(**report)
-    response = client.post("/api/documents/upload", files={"file": ("rapport.pdf", content, "application/pdf")})
+    response = upload_pdf(client, content, "rapport.pdf")
     return response.json()["cooperative_id"]
 
 
-def test_blocked_site_still_creates_property_with_advice(client, monkeypatch):
-    blocked_site(monkeypatch)
-    response = client.post("/api/properties/from-url", json={"url": "https://www.hemnet.se/bostad/123"})
-    assert response.status_code == 201
-    overview = response.json()
-    assert overview["retrieval_status"] == "fetch_failed"
-    assert "klistra in" in overview["retrieval_message"].lower()
-    assert overview["source_name"] == "Hemnet"
-    assert field(overview, "asking_price")["status"] == "missing"
-
-
-def test_pasting_text_after_a_blocked_fetch_fills_in_the_facts(client, monkeypatch):
-    blocked_site(monkeypatch)
-    overview = client.post("/api/properties/from-url", json={"url": "https://www.hemnet.se/bostad/123"}).json()
-    overview = client.post(f"/api/properties/{overview['id']}/text", json={"text": HEMNET_STYLE}).json()
+def test_pasted_text_with_a_link_fills_in_the_facts(client):
+    overview = client.post("/api/properties/from-text",
+                           json={"text": HEMNET_STYLE, "url": "https://www.hemnet.se/bostad/123"}).json()
     assert overview["retrieval_status"] == "pasted"
     assert field(overview, "asking_price")["value"] == 4_250_000
     assert field(overview, "asking_price")["status"] == "extracted"
     assert "4 250 000 kr" in field(overview, "asking_price")["excerpt"]
     assert overview["source_url"] == "https://www.hemnet.se/bostad/123"
+    assert overview["source_name"] == "Hemnet"
 
 
-def test_fetched_agent_page(client, monkeypatch):
-    agent_site(monkeypatch)
-    overview = client.post("/api/properties/from-url", json={"url": "https://maklare.example/objekt/1"}).json()
-    assert overview["retrieval_status"] == "fetched"
-    assert field(overview, "living_area")["value"] == 71
-    assert field(overview, "living_area")["method"] == "structured_data"
-    assert overview["has_listing_text"]
+def test_listing_link_must_be_a_web_address(client):
+    response = client.post("/api/properties/from-text", json={"text": HEMNET_STYLE, "url": "javascript:alert(1)"})
+    assert response.status_code == 422
+    assert "http" in response.json()["detail"]
 
 
-def test_same_url_twice_returns_the_same_property(client, monkeypatch):
-    agent_site(monkeypatch)
-    first = client.post("/api/properties/from-url", json={"url": "https://maklare.example/objekt/1"}).json()
-    second = client.post("/api/properties/from-url", json={"url": "https://maklare.example/objekt/1"}).json()
-    assert first["id"] == second["id"]
-    assert len(client.get("/api/properties").json()) == 1
+def test_link_is_saved_but_never_fetched(client):
+    assert client.post("/api/properties/from-url", json={"url": "https://www.hemnet.se/bostad/1"}).status_code in (404, 405)
 
 
 def test_calculated_price_per_sqm(client):
@@ -185,25 +149,3 @@ def test_list_shows_cooperative_risk(client):
     assert item["cooperative_overall_level"] is not None
 
 
-def test_refresh_updates_from_page_but_keeps_manual_values(client, monkeypatch):
-    agent_site(monkeypatch)
-    overview = client.post("/api/properties/from-url", json={"url": "https://maklare.example/objekt/1"}).json()
-    client.patch(f"/api/properties/{overview['id']}", json={"monthly_fee": 5_000})
-    overview = client.post(f"/api/properties/{overview['id']}/refresh").json()
-    assert field(overview, "monthly_fee")["value"] == 5_000
-    assert field(overview, "living_area")["value"] == 71
-
-
-def test_failed_refresh_keeps_existing_data(client, monkeypatch):
-    agent_site(monkeypatch)
-    overview = client.post("/api/properties/from-url", json={"url": "https://maklare.example/objekt/1"}).json()
-    blocked_site(monkeypatch)
-    overview = client.post(f"/api/properties/{overview['id']}/refresh").json()
-    assert overview["retrieval_status"] == "fetched"
-    assert field(overview, "living_area")["value"] == 71
-    assert "tillåter inte" in overview["retrieval_message"]
-
-
-def test_refresh_without_url_is_refused(client):
-    overview = client.post("/api/properties/from-text", json={"text": HEMNET_STYLE}).json()
-    assert client.post(f"/api/properties/{overview['id']}/refresh").status_code == 409
