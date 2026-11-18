@@ -4,14 +4,17 @@ import {
   api,
   ApiError,
   MAX_COMPARED_COOPERATIVES,
+  MAX_COMPARED_PROPERTIES,
   type CooperativeListItem,
   type DocumentSummary,
   type PropertyListItem,
 } from '../api'
 import { ConcernBadge } from '../components/Badges'
+import { CompareBar } from '../components/CompareBar'
 import { DocumentUploader } from '../components/DocumentUploader'
 import { ListingImporter } from '../components/ListingImporter'
 import { formatDate } from '../format'
+import { toggleId } from '../selection'
 
 export function Dashboard() {
   const navigate = useNavigate()
@@ -19,6 +22,7 @@ export function Dashboard() {
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<number[]>([])
   const [properties, setProperties] = useState<PropertyListItem[] | null>(null)
+  const [selectedProperties, setSelectedProperties] = useState<number[]>([])
 
   useEffect(() => {
     api
@@ -30,16 +34,6 @@ export function Dashboard() {
       .then(setProperties)
       .catch(() => setProperties([]))
   }, [])
-
-  function toggleSelected(id: number) {
-    setSelected((current) =>
-      current.includes(id)
-        ? current.filter((selectedId) => selectedId !== id)
-        : current.length < MAX_COMPARED_COOPERATIVES
-          ? [...current, id]
-          : current,
-    )
-  }
 
   function onDocumentAdded(document: DocumentSummary) {
     if (document.cooperative_id) navigate(`/foreningar/${document.cooperative_id}`)
@@ -68,29 +62,43 @@ export function Dashboard() {
       </div>
 
       <section>
-        <h2>Bostäder</h2>
+        <div className="spread">
+          <h2>Bostäder</h2>
+          {properties && properties.length >= 2 && (
+            <span className="small muted">Bocka i 2–{MAX_COMPARED_PROPERTIES} bostäder för att jämföra dem</span>
+          )}
+        </div>
         {properties === null && <p className="muted">Laddar …</p>}
         {properties?.length === 0 && <p className="muted">Inga bostäder ännu. Lägg till en annons ovan.</p>}
         {properties && properties.length > 0 && (
           <ul className="list card" style={{ padding: '0 1.25rem' }}>
             {properties.map((property) => (
               <li key={property.id} className="spread">
-                <div>
-                  <Link to={`/bostader/${property.id}`}>
-                    <strong>{property.address ?? property.title ?? 'Bostad utan adress'}</strong>
-                  </Link>
-                  <div className="small muted">
-                    {[
-                      property.asking_price ? `${new Intl.NumberFormat('sv-SE').format(property.asking_price)} kr` : 'Pris saknas',
-                      property.living_area ? `${property.living_area} m²` : null,
-                      property.rooms ? `${String(property.rooms).replace('.', ',')} rum` : null,
-                      property.monthly_fee ? `${new Intl.NumberFormat('sv-SE').format(property.monthly_fee)} kr/mån` : null,
-                      property.cooperative_name,
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')}
+                <label className="select-item">
+                  <input
+                    type="checkbox"
+                    checked={selectedProperties.includes(property.id)}
+                    disabled={!selectedProperties.includes(property.id) && selectedProperties.length >= MAX_COMPARED_PROPERTIES}
+                    onChange={() => setSelectedProperties((current) => toggleId(current, property.id, MAX_COMPARED_PROPERTIES))}
+                    aria-label={`Välj ${property.address ?? property.title ?? 'bostaden'} för jämförelse`}
+                  />
+                  <div>
+                    <Link to={`/bostader/${property.id}`}>
+                      <strong>{property.address ?? property.title ?? 'Bostad utan adress'}</strong>
+                    </Link>
+                    <div className="small muted">
+                      {[
+                        property.asking_price ? `${new Intl.NumberFormat('sv-SE').format(property.asking_price)} kr` : 'Pris saknas',
+                        property.living_area ? `${property.living_area} m²` : null,
+                        property.rooms ? `${String(property.rooms).replace('.', ',')} rum` : null,
+                        property.monthly_fee ? `${new Intl.NumberFormat('sv-SE').format(property.monthly_fee)} kr/mån` : null,
+                        property.cooperative_name,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </div>
                   </div>
-                </div>
+                </label>
                 {property.cooperative_overall_level ? (
                   <ConcernBadge level={property.cooperative_overall_level} label={`Förening: ${property.cooperative_overall_label}`} />
                 ) : (
@@ -100,6 +108,14 @@ export function Dashboard() {
             ))}
           </ul>
         )}
+        <CompareBar
+          count={selectedProperties.length}
+          max={MAX_COMPARED_PROPERTIES}
+          singular="bostad"
+          plural="bostäder"
+          onClear={() => setSelectedProperties([])}
+          onCompare={() => navigate(`/jamfor/bostader?ids=${selectedProperties.join(',')}`)}
+        />
       </section>
 
       <section>
@@ -121,7 +137,7 @@ export function Dashboard() {
                     type="checkbox"
                     checked={selected.includes(cooperative.id)}
                     disabled={!selected.includes(cooperative.id) && selected.length >= MAX_COMPARED_COOPERATIVES}
-                    onChange={() => toggleSelected(cooperative.id)}
+                    onChange={() => setSelected((current) => toggleId(current, cooperative.id, MAX_COMPARED_COOPERATIVES))}
                     aria-label={`Välj ${cooperative.name} för jämförelse`}
                   />
                   <div>
@@ -140,21 +156,14 @@ export function Dashboard() {
             ))}
           </ul>
         )}
-        {selected.length > 0 && (
-          <div className="compare-bar">
-            <span>
-              {selected.length} {selected.length === 1 ? 'förening vald' : 'föreningar valda'}
-              {selected.length === 1 && <span className="muted"> – välj minst en till</span>}
-              {selected.length === MAX_COMPARED_COOPERATIVES && <span className="muted"> (max)</span>}
-            </span>
-            <span className="row">
-              <button onClick={() => setSelected([])}>Rensa</button>
-              <button className="primary" disabled={selected.length < 2} onClick={() => navigate(`/jamfor?ids=${selected.join(',')}`)}>
-                Jämför
-              </button>
-            </span>
-          </div>
-        )}
+        <CompareBar
+          count={selected.length}
+          max={MAX_COMPARED_COOPERATIVES}
+          singular="förening"
+          plural="föreningar"
+          onClear={() => setSelected([])}
+          onCompare={() => navigate(`/jamfor?ids=${selected.join(',')}`)}
+        />
       </section>
     </div>
   )

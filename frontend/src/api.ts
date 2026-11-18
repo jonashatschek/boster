@@ -195,6 +195,49 @@ export interface CooperativeComparison {
 
 export const MAX_COMPARED_COOPERATIVES = 4
 
+export const MAX_COMPARED_PROPERTIES = 4
+
+export interface PropertyComparisonCell {
+  property_id: number
+  value: string | number | boolean | null
+  status: VerificationStatus
+  excerpt: string | null
+  note: string | null
+  level: ConcernLevel | null
+  level_label: string | null
+  fiscal_year: number | null
+}
+
+export interface PropertyComparisonRow {
+  key: string
+  group: string
+  label: string
+  kind: 'text' | 'number' | 'integer' | 'boolean' | 'date' | 'level' | 'findings'
+  unit: string | null
+  is_estimate: boolean
+  note: string | null
+  cells: PropertyComparisonCell[]
+}
+
+export interface ComparedProperty {
+  id: number
+  title: string | null
+  address: string | null
+  source_name: string | null
+  cooperative_id: number | null
+  cooperative_name: string | null
+  fiscal_year: number | null
+  overall_level: ConcernLevel | null
+  overall_label: string | null
+  maintenance: Finding[]
+}
+
+export interface PropertyComparison {
+  properties: ComparedProperty[]
+  rows: PropertyComparisonRow[]
+  warnings: string[]
+}
+
 export type PropertyFieldValue = string | number | boolean | null
 
 export interface PropertyField {
@@ -317,6 +360,9 @@ export const api = {
     request<CooperativeOverview>(`/api/observations/${observationId}`, { method: 'DELETE' }),
   compareCooperatives: (ids: number[]) =>
     request<CooperativeComparison>(`/api/comparisons/cooperatives?ids=${ids.join(',')}`),
+  /** `ids` is passed through as written in the URL, so the backend can report invalid ids. */
+  compareProperties: (ids: string) =>
+    request<PropertyComparison>(`/api/comparisons/properties?ids=${encodeURIComponent(ids)}`),
   listProperties: () => request<PropertyListItem[]>('/api/properties'),
   getProperty: (id: number) => request<PropertyOverview>(`/api/properties/${id}`),
   addPropertyFromText: (text: string, url?: string) =>

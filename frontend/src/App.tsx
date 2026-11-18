@@ -4,6 +4,7 @@ import { StartupNotice } from './components/StartupNotice'
 import { ComparisonPage } from './pages/ComparisonPage'
 import { CooperativePage } from './pages/CooperativePage'
 import { Dashboard } from './pages/Dashboard'
+import { PropertyComparisonPage } from './pages/PropertyComparisonPage'
 import { PropertyPage } from './pages/PropertyPage'
 
 export default function App() {
@@ -24,6 +25,7 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/foreningar/:id" element={<CooperativePage />} />
           <Route path="/jamfor" element={<ComparisonPage />} />
+          <Route path="/jamfor/bostader" element={<PropertyComparisonPage />} />
           <Route path="/bostader/:id" element={<PropertyPage />} />
           <Route path="*" element={<p>Sidan finns inte. <Link to="/">Till startsidan</Link></p>} />
         </Routes>
