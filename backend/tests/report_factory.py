@@ -25,8 +25,11 @@ def make_report_pdf(name: str = "Brf Provhuset", organisation_number: str = "769
                     period: tuple[str, str] = ("2025-01-01", "2025-12-31"), previous_period_end: str = "2024-12-31",
                     key_figures: list[tuple[str, str, str]] = DEFAULT_KEY_FIGURES,
                     statements: list[tuple[str, str, str]] = DEFAULT_STATEMENTS,
-                    land: str = "Fastigheten innehas med tomträtt.") -> bytes:
-    """A report whose fiscal year is `period`, with one comparison year in the tables."""
+                    land: str = "Fastigheten innehas med tomträtt.", notes: tuple[str, ...] = ()) -> bytes:
+    """A report whose fiscal year is `period`, with one comparison year in the tables.
+
+    `notes` are lines on an extra management-report page (for quoted maintenance passages).
+    """
     current_year, previous_year = period[1][:4], previous_period_end[:4]
     document = pymupdf.open()
     cover = document.new_page()
@@ -48,6 +51,11 @@ def make_report_pdf(name: str = "Brf Provhuset", organisation_number: str = "769
     statement_page = document.new_page()
     statement_page.insert_text((60, 60), "Resultaträkning och balansräkning", fontsize=11)
     table(statement_page, 80, [("", period[1], previous_period_end), *statements])
+    if notes:
+        notes_page = document.new_page()
+        notes_page.insert_text((60, 60), "Förvaltningsberättelse", fontsize=11)
+        for index, line in enumerate(notes):
+            notes_page.insert_text((60, 80 + index * 14), line, fontsize=9)
     content = document.tobytes()
     document.close()
     return content

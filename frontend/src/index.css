@@ -560,6 +560,25 @@ dl.facts dd {
   font-weight: 700;
 }
 
+.property-comparison td {
+  vertical-align: top;
+  white-space: normal;
+  max-width: 260px;
+}
+
+.property-comparison td .badge {
+  margin-top: 0.2rem;
+}
+
+.property-comparison tr.group-row th {
+  text-align: left;
+  padding-top: 1rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
 .swatch {
   display: inline-block;
   width: 10px;

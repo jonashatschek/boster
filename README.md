@@ -20,7 +20,7 @@ The full product specification is in [specs/spec.md](specs/spec.md).
 | 3 | Import a listing (pasted text or manual entry) → property page linked to a cooperative | Done |
 | 3b | Runs in the browser as a static site; export and import of all data | Done |
 | 4 | Swedish AI summaries with links to the evidence | Next (needs a way to call an AI model without a server holding the key) |
-| 5 | Comparing properties side by side, and saved comparisons | Planned |
+| 5 | Comparing properties side by side, and saved comparisons | Compare side by side: done. Saved comparisons: planned |
 
 ## What it does today
 
@@ -33,6 +33,7 @@ The full product specification is in [specs/spec.md](specs/spec.md).
 - **Links to the cooperative** automatically, but only on an exact name match ("BRF Segelflygaren" = "HSB Bostadsrättsförening Segelflygaren i Stockholm", while "Byamännen" ≠ "Byamännen 2"). Similar names are suggested for you to confirm. A report uploaded later links any waiting listings with a matching name.
 - **Calculates** price per m², annual fee per m², the apartment's approximate share of the cooperative's loans, and the possible fee increase if interest rates rise by one percentage point. The formula and inputs are shown for each.
 - **Shows the agent's description verbatim** and marks it as claims, not facts.
+- **Compares apartments:** tick 2–4 apartments on the dashboard and choose *Jämför*. The apartments are shown side by side, grouped into the apartment itself, location, features, the cooperative (its overall rating and each risk-rated key figure for its latest year), estimates and maintenance. Every value keeps its status badge and its source (the listing line, the formula, or the report page); missing values show as "Saknas" with the reason, never as zero. The loan share and the possible fee increase are marked as estimates, and the page warns when they rest on different debt measures (per m² of total area vs. tenant-owned area). Maintenance shows which topics the cooperative's reports mention, with page numbers, and the quotes on request. Apartments are not ranked. The selection is kept in the URL (`#/jamfor/bostader?ids=1,3`).
 
 ### Cooperatives
 
@@ -149,7 +150,7 @@ backend/
   tests/
 frontend/
   src/
-    pages/        Dashboard, PropertyPage, CooperativePage, ComparisonPage
+    pages/        Dashboard, PropertyPage, CooperativePage, ComparisonPage, PropertyComparisonPage
     components/   Uploader, value details dialog, charts, badges, export/import
     python/       Web Worker running Pyodide, and the client that talks to it
     pdf/          Reading page text with pdf.js

@@ -157,8 +157,13 @@ def _source(status: VerificationStatus, method: str, excerpt: str | None, note: 
             "updated_at": datetime.now(timezone.utc).isoformat()}
 
 
+def missing_important_fields(listing: Property) -> dict[str, str]:
+    """Important facts the listing lacks: field name → label."""
+    return {name: spec.label for name, spec in FIELDS.items() if spec.important and getattr(listing, name) is None}
+
+
 def _completeness_message(listing: Property) -> str | None:
-    missing = [spec.label for name, spec in FIELDS.items() if spec.important and getattr(listing, name) is None]
+    missing = list(missing_important_fields(listing).values())
     if not missing:
         return None
     return f"Kunde inte hitta: {', '.join(missing).lower()}. Fyll i dem manuellt eller klistra in annonstexten."
@@ -253,16 +258,16 @@ def build_property_overview(session: Session, listing: Property, rules: RiskRule
         id=listing.id, title=listing.title, source_url=listing.source_url, source_name=listing.source_name,
         retrieval_status=listing.retrieval_status, retrieval_message=listing.retrieval_message,
         retrieved_at=listing.retrieved_at, created_at=listing.created_at, updated_at=listing.updated_at,
-        fields=[_field(listing, name, spec) for name, spec in FIELDS.items()],
-        description=_field(listing, "description", FieldSpec("Beskrivning", "longtext")),
-        derived=_derived_values(listing, cooperative_overview),
+        fields=[listing_field(listing, name, spec) for name, spec in FIELDS.items()],
+        description=listing_field(listing, "description", FieldSpec("Beskrivning", "longtext")),
+        derived=derived_values(listing, cooperative_overview),
         cooperative=linked, cooperative_suggestions=suggestions,
-        missing=[spec.label for name, spec in FIELDS.items() if spec.important and getattr(listing, name) is None],
+        missing=list(missing_important_fields(listing).values()),
         has_listing_text=bool(listing.listing_text),
     )
 
 
-def _field(listing: Property, name: str, spec: FieldSpec) -> PropertyField:
+def listing_field(listing: Property, name: str, spec: FieldSpec) -> PropertyField:
     value = getattr(listing, name)
     source = (listing.field_sources or {}).get(name, {})
     if name == "balcony" and value and listing.balcony_description:
@@ -284,7 +289,7 @@ def _format_number(value: float, unit: str) -> str:
     return f"{text} {unit}"
 
 
-def _derived_values(listing: Property, cooperative_overview) -> list[DerivedValue]:
+def derived_values(listing: Property, cooperative_overview) -> list[DerivedValue]:
     area, price, fee = listing.living_area, listing.asking_price, listing.monthly_fee
     values = [
         _derived("price_per_sqm", "Pris per kvm", "kr/m²", "Utgångspris / boarea",

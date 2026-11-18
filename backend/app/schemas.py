@@ -325,3 +325,44 @@ class PropertyUpdate(BaseModel):
 
 class PropertyCooperativeLink(BaseModel):
     cooperative_id: int | None  # None unlinks.
+
+
+class PropertyComparisonCell(BaseModel):
+    property_id: int
+    value: str | float | int | bool | date | None
+    status: str  # VerificationStatus value, "calculated", or "missing".
+    excerpt: str | None = None  # The listing line, or the formula and its inputs.
+    note: str | None = None  # Why a value is missing, or what to keep in mind.
+    level: str | None = None  # Concern level, for the cooperative's risk-rated figures.
+    level_label: str | None = None
+    fiscal_year: int | None = None  # For cooperative figures.
+
+
+class PropertyComparisonRow(BaseModel):
+    key: str
+    group: str  # "Bostaden", "Läge", "Egenskaper", "Förening", "Uppskattningar", "Underhåll".
+    label: str
+    kind: str  # "text", "number", "integer", "boolean", "date", "level".
+    unit: str | None
+    is_estimate: bool = False  # An approximation, not a verified figure.
+    note: str | None = None
+    cells: list[PropertyComparisonCell]  # One per apartment, in the same order as `properties`.
+
+
+class ComparedProperty(BaseModel):
+    id: int
+    title: str | None
+    address: str | None
+    source_name: str | None
+    cooperative_id: int | None
+    cooperative_name: str | None  # The linked cooperative's name, else the name in the listing.
+    fiscal_year: int | None  # The linked cooperative's latest fiscal year.
+    overall_level: str | None
+    overall_label: str | None
+    maintenance: list[Finding]  # Quoted report passages on renovations, loans and fees.
+
+
+class PropertyComparison(BaseModel):
+    properties: list[ComparedProperty]
+    rows: list[PropertyComparisonRow]
+    warnings: list[str]
