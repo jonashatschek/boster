@@ -10,7 +10,9 @@
       "Bash(npx tsc -b)",
       "Bash(git status *)",
       "Bash(git diff *)",
-      "Bash(git log *)"
+      "Bash(git log *)",
+      "Bash(gh issue list *)",
+      "Bash(gh issue view *)"
     ]
   },
   "hooks": {

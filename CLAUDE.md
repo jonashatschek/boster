@@ -29,7 +29,18 @@ CI (`.github/workflows/deploy.yml`) runs pytest, lint and build, then deploys to
 - **Browser constraints:** the app can't fetch other websites or hold secrets; anything added to `backend/app` must work under Pyodide (no native-only packages, no network calls).
 - Uploaded PDFs and imported files are untrusted input.
 
+## How to work
+
+- **Clarify before building.** If a requirement is ambiguous and the spec, README or code doesn't answer it, ask before writing code. Never guess a domain rule (what counts as missing, how a figure is classified, what the UI should say). State any assumption you do make.
+- **Test first for backend logic.** Write a failing pytest, run it and see it fail for the right reason, then write the minimal code to pass, then refactor with tests green. A bug fix starts with a test that reproduces the bug.
+- **Frontend has no test runner yet.** Verify UI changes with `npm run lint`, `npx tsc -b` and by running the app and checking the actual flow in the browser.
+- **No "done" without evidence.** Run the checks and report the results. Say explicitly what you could not verify.
+- **Keep scope tight.** Do what was asked; propose an issue for anything else you notice.
+- For a whole issue, the user runs `/feature <n>` (`.claude/skills/feature/SKILL.md`), which walks through these steps.
+
 ## Working conventions
+
+- **Todos live in GitHub Issues** (`gh issue list`, `gh issue view <n>`), grouped by milestone per roadmap step. When you find out-of-scope work, propose an issue instead of doing it. Reference the issue in commits (`Fixes #12`). The repo is public: keep issues free of personal data.
 
 - When changing extraction, add or update a test with values checked by hand against the real PDF.
 - Update the README status table / "What it does today" when a feature lands.

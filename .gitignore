@@ -25,3 +25,4 @@ sample_documents/
 # Claude Code hook state
 .claude/hooks/.last-pass
 .claude/settings.local.json
+CLAUDE.local.md
