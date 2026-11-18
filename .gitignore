@@ -21,3 +21,7 @@ sample_documents/
 # Editors
 .vscode/
 .idea/
+
+# Claude Code hook state
+.claude/hooks/.last-pass
+.claude/settings.local.json
