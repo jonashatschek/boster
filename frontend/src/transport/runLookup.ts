@@ -4,7 +4,6 @@
 
 import { api, type ExternalRequest, type TransportInfo, type TransportStep } from '../api'
 
-const KEY_STORAGE = 'boster.trafiklabKey'
 const TIMEOUT_MS = 15_000
 // The only services the page may call, whatever the backend asks for.
 const ALLOWED_ORIGINS = new Set([
@@ -13,23 +12,12 @@ const ALLOWED_ORIGINS = new Set([
   'https://valhalla1.openstreetmap.de',
 ])
 
-/** The visitor's own Trafiklab key. It stays in this browser and is not part of an export. */
-export function loadTrafiklabKey(): string | null {
-  try {
-    return localStorage.getItem(KEY_STORAGE)
-  } catch {
-    return null
-  }
-}
-
-export function saveTrafiklabKey(key: string | null): void {
-  try {
-    if (key) localStorage.setItem(KEY_STORAGE, key)
-    else localStorage.removeItem(KEY_STORAGE)
-  } catch {
-    // Storage blocked (e.g. a private window): the key then only lasts until the page is reloaded.
-  }
-}
+/**
+ * The site's Trafiklab key, shared by all visitors. It is set when the site is built (a GitHub
+ * Actions variable in CI, frontend/.env locally) and is readable by anyone in the built site;
+ * it is not a secret. Null when the build has none.
+ */
+export const TRAFIKLAB_KEY: string | null = import.meta.env.VITE_TRAFIKLAB_API_KEY?.trim() || null
 
 export async function runTransportLookup(propertyId: number, key: string): Promise<TransportInfo> {
   let result = await api.transportStep(propertyId, { stage: 'start' })

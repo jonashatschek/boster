@@ -157,9 +157,9 @@ def _stop(item: dict) -> Stop | None:
 
 def _resrobot_error(data: dict) -> str:
     if str(data.get("errorCode", "")).startswith("API_AUTH"):
-        return "Trafiklab godkände inte nyckeln. Kontrollera din Trafiklab-nyckel."
+        return "Trafiklab godkände inte Bosters nyckel, så hållplatser kan inte hämtas just nu."
     if str(data.get("errorCode", "")).startswith("API_QUOTA"):
-        return "Trafiklab-nyckelns kvot är slut för tillfället. Försök igen senare."
+        return "Bosters Trafiklab-nyckel har använts för mycket för tillfället. Försök igen senare."
     return "Trafiklab kunde inte svara på frågan om hållplatser."
 
 
