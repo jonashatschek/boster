@@ -217,3 +217,15 @@ def test_out_of_range_product_classes_are_ignored(field, value):
     data = {"stopLocationOrCoordLocation": [{"StopLocation": {
         "name": "A", "extId": "1", "lat": 59.3, "lon": 18.0, "dist": 100, field: value}}]}
     assert parse_nearby_stops(data)[0].types == set()
+
+
+def test_recorded_resrobot_response():
+    # A real response (2026-11-19) for Ringvägen 12, Stockholm, r=2000. Checked by hand against the raw JSON.
+    stops = parse_nearby_stops(fixture("resrobot_nearbystops_recorded.json"))
+    assert len(stops) == 105
+    nearest = nearest_per_type(stops)
+    assert nearest[TransportType.SUBWAY].name == "Zinkensdamm T-bana (Stockholm kn)"
+    assert nearest[TransportType.SUBWAY].straight_metres == 25
+    assert nearest[TransportType.BUS] == nearest[TransportType.SUBWAY]
+    assert nearest[TransportType.COMMUTER_TRAIN].name == "Stockholm södra station"
+    assert nearest[TransportType.COMMUTER_TRAIN].straight_metres == 872

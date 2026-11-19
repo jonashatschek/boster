@@ -28,8 +28,8 @@ from app.transport.nearby import (
 DONE, FAILED = "done", "failed"
 SOURCE = ("Adressen: OpenStreetMap (Nominatim). Hållplatser: Trafiklab ResRobot. "
           "Gångväg och tid: OpenStreetMap (Valhalla).")
-STREET_LEVEL = ("Adressen hittades bara på gatunivå (husnumret finns inte i OpenStreetMap), "
-                "så avstånden räknas från gatan, inte från huset.")
+STREET_LEVEL = ("Husnumret hittades inte i OpenStreetMap, bara gatan. Avstånden till hållplatser skulle då bli "
+                "osäkra, så de visas inte. Kontrollera adressen.")
 NOT_FETCHED = "Kollektivtrafiken har inte hämtats."
 
 _SERVICES = {"geocode": "OpenStreetMap", "stops": "Trafiklab", "walking": "OpenStreetMaps ruttjänst"}
@@ -92,6 +92,8 @@ def _receive(lookup: TransportLookup, step: TransportStep) -> ExternalRequest | 
         place = parse_geocode(body)
         lookup.place_label, lookup.place_lat, lookup.place_lon = place.label, place.lat, place.lon
         lookup.house_level = place.house_level
+        if not place.house_level:  # On a long street the distances could be far off.
+            raise TransportLookupError(STREET_LEVEL)
         lookup.stage = "stops"
         return ExternalRequest(stage="stops", service="resrobot", method="GET",
                                url=f"{RESROBOT_URL}?{urlencode(nearby_stops_params(place))}", needs_key=True)
@@ -165,7 +167,7 @@ def transport_info(listing: Property) -> TransportInfo:
         status = lookup.stage
     else:
         status = "pending"
-    message = lookup.message if lookup.stage == FAILED else (STREET_LEVEL if lookup.house_level is False else None)
+    message = lookup.message if lookup.stage == FAILED else None
     return TransportInfo(
         status=status, message=message, query=query, looked_up_query=lookup.query,
         place_label=lookup.place_label, house_level=lookup.house_level, retrieved_at=lookup.retrieved_at,

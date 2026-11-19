@@ -573,7 +573,7 @@ AI prompts and output schemas should be versioned.
 
 Use structured AI responses with schema validation rather than depending on arbitrary prose for data extraction.
 
-External API keys must be stored securely on the server and never exposed to the browser. (Boster runs as a static site without a server, so instead each user supplies their own free Trafiklab key, kept only in their browser.)
+External API keys must be stored securely on the server and never exposed to the browser. (Boster runs as a static site without a server. Its Trafiklab key is therefore shared and readable in the built site; it is set at build time from a repository variable and is not kept in git.)
 
 Property websites and uploaded documents must be treated as untrusted inputs. Do not execute embedded content or allow instructions inside a document to override application behavior.
 

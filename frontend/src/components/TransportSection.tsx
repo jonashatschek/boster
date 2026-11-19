@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ApiError, type TransportInfo, type TransportStop } from '../api'
 import { formatDate } from '../format'
-import { loadTrafiklabKey, runTransportLookup, saveTrafiklabKey } from '../transport/runLookup'
+import { runTransportLookup, TRAFIKLAB_KEY } from '../transport/runLookup'
 import { StatusBadge } from './Badges'
 
 interface Props {
@@ -16,7 +16,7 @@ const AUTOMATIC = new Set<TransportInfo['status']>(['not_fetched', 'stale', 'pen
 
 /** Nearest metro, local train and bus stop, with the walk there. Fetched automatically. */
 export function TransportSection({ propertyId, transport, onChange }: Props) {
-  const [key, setKey] = useState<string | null>(loadTrafiklabKey)
+  const key = TRAFIKLAB_KEY
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // Each address is fetched automatically at most once per visit, so a failure can't loop.
@@ -40,20 +40,20 @@ export function TransportSection({ propertyId, transport, onChange }: Props) {
     if (!autoQuery || busy || attempted.current.has(autoQuery)) return
     attempted.current.add(autoQuery)
     void fetchTransport()
-    // fetchTransport only changes with the key, which is part of autoQuery's condition.
+    // fetchTransport only depends on the property and the build-time key, which don't change here.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoQuery, busy])
 
-  function changeKey(newKey: string | null) {
-    saveTrafiklabKey(newKey)
-    setKey(newKey)
-  }
+  // Types without a stop within walking distance are left out of the list.
+  const found = transport.stops.filter((stop) => stop.walking_metres !== null && stop.walking_seconds !== null)
 
   return (
     <section className="card stack">
       <div className="spread">
         <h2>Kollektivtrafik</h2>
-        {key && transport.status !== 'unavailable' && (
+        {/* Only offered after a failure that a retry can fix. A missing house number needs a corrected
+            address instead, which starts a new lookup by itself. */}
+        {key && ((transport.status === 'failed' && transport.house_level !== false) || error) && (
           <button onClick={fetchTransport} disabled={busy}>
             {busy ? 'Hämtar …' : 'Hämta igen'}
           </button>
@@ -63,7 +63,9 @@ export function TransportSection({ propertyId, transport, onChange }: Props) {
       {transport.status === 'unavailable' ? (
         <div className="notice warning">{transport.message}</div>
       ) : !key ? (
-        <KeyForm onSave={changeKey} />
+        <div className="notice warning">
+          Den här versionen av Boster saknar en nyckel till Trafiklab, så kollektivtrafiken kan inte hämtas.
+        </div>
       ) : (
         <>
           {busy && <div className="notice">Hämtar hållplatser och gångvägar …</div>}
@@ -75,17 +77,17 @@ export function TransportSection({ propertyId, transport, onChange }: Props) {
               gäller den gamla adressen.
             </div>
           )}
-          {transport.house_level === false && transport.message && transport.status !== 'failed' && (
-            <div className="notice warning">{transport.message}</div>
-          )}
-          {transport.stops.length > 0 && (
+          {found.length > 0 && (
             <ul className="list">
-              {transport.stops.map((stop) => (
+              {found.map((stop) => (
                 <StopRow key={stop.type} stop={stop} />
               ))}
             </ul>
           )}
-          {transport.stops.length > 0 && (
+          {transport.stops.length > 0 && found.length === 0 && (
+            <p>Ingen tunnelbana, pendeltåg/lokaltåg eller buss inom 2 km gångavstånd.</p>
+          )}
+          {found.length > 0 && (
             <p className="small muted">
               Gångavstånd och tid till den närmaste hållplatsen fågelvägen av varje slag. Tiden kommer från
               ruttjänsten och förutsätter normal gångtakt. Pendeltåg/lokaltåg omfattar även t.ex. Roslagsbanan och
@@ -99,7 +101,8 @@ export function TransportSection({ propertyId, transport, onChange }: Props) {
                 {transport.place_label && <> → hittad som ”{transport.place_label}”</>}
               </span>
               <span>
-                {transport.source} Hämtad {formatDate(transport.retrieved_at)}.
+                {found.length > 0 ? transport.source : 'Adressen: OpenStreetMap (Nominatim).'} Hämtad{' '}
+                {formatDate(transport.retrieved_at)}.
               </span>
             </div>
           )}
@@ -112,14 +115,6 @@ export function TransportSection({ propertyId, transport, onChange }: Props) {
           OpenStreetMap-bidragsgivare
         </a>
         .
-        {key && (
-          <>
-            {' '}
-            <button className="link" onClick={() => changeKey(null)}>
-              Ta bort Trafiklab-nyckeln
-            </button>
-          </>
-        )}
       </p>
     </section>
   )
@@ -130,61 +125,18 @@ function StopRow({ stop }: { stop: TransportStop }) {
     <li className="stack" style={{ gap: '0.2rem' }}>
       <div className="spread">
         <span className="small muted">{stop.label}</span>
-        {stop.walking_metres === null || stop.walking_seconds === null ? (
-          <span className="missing">Saknas</span>
-        ) : (
-          <span>
-            <strong>{stop.name}</strong>{' '}
-            {formatMetres(stop.walking_metres)} (ca {Math.max(1, Math.round(stop.walking_seconds / 60))} min) till fots
-          </span>
-        )}
+        <span>
+          <strong>{stop.name}</strong> {formatMetres(stop.walking_metres!)} (ca{' '}
+          {Math.max(1, Math.round(stop.walking_seconds! / 60))} min) till fots
+        </span>
       </div>
-      {stop.walking_metres !== null ? (
-        <div>
-          <StatusBadge status={stop.status} labels={STOP_STATUS_LABELS} />
-        </div>
-      ) : (
-        stop.note && <span className="small muted">{stop.note}</span>
-      )}
+      <div>
+        <StatusBadge status={stop.status} labels={STOP_STATUS_LABELS} />
+      </div>
     </li>
   )
 }
 
 function formatMetres(metres: number): string {
   return `${new Intl.NumberFormat('sv-SE').format(metres)} m`
-}
-
-function KeyForm({ onSave }: { onSave: (key: string) => void }) {
-  const [draft, setDraft] = useState('')
-
-  function submit(event: FormEvent) {
-    event.preventDefault()
-    if (draft.trim()) onSave(draft.trim())
-  }
-
-  return (
-    <form className="stack" onSubmit={submit}>
-      <p className="small">
-        För att hitta hållplatser behövs en egen, gratis nyckel till Trafiklabs API ResRobot. Skapa ett konto på{' '}
-        <a href="https://www.trafiklab.se" target="_blank" rel="noreferrer">
-          trafiklab.se
-        </a>
-        , lägg till ett projekt med ”ResRobot v2.1” och klistra in nyckeln här. Nyckeln sparas bara i den här
-        webbläsaren och ingår inte i en export.
-      </p>
-      <div className="input-row">
-        <input
-          type="password"
-          autoComplete="off"
-          placeholder="Trafiklab-nyckel (ResRobot v2.1)"
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          aria-label="Trafiklab-nyckel"
-        />
-        <button type="submit" className="primary" disabled={!draft.trim()}>
-          Spara och hämta
-        </button>
-      </div>
-    </form>
-  )
 }

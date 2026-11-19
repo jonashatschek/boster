@@ -131,10 +131,18 @@ def test_result_is_kept_on_the_property_page(client):
     assert stop_of(transport, "subway")["walking_metres"] == 163
 
 
-def test_street_level_match_is_flagged(client):
-    transport = run_lookup(client, add_listing(client), geocode="nominatim_street_only.json")["transport"]
+def test_street_level_match_stops_the_lookup(client):
+    # Only the street was found: on a long street the distances could be far off, so none are shown,
+    # and the stops and walking routes are never requested.
+    property_id = add_listing(client)
+    step(client, property_id, "start")
+    result = step(client, property_id, "geocode", fixture("nominatim_street_only.json"))
+    assert result["request"] is None
+    transport = result["transport"]
+    assert transport["status"] == "failed"
     assert transport["house_level"] is False
-    assert "gatunivå" in transport["message"]
+    assert "Husnumret hittades inte" in transport["message"]
+    assert transport["stops"] == []
 
 
 # --- Missing and failed ---------------------------------------------------------------------------

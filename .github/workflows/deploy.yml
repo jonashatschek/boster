@@ -31,6 +31,9 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Build site
         working-directory: frontend
+        env:
+          # Shared Trafiklab key (ResRobot v2.1), a repository variable. Public in the built site.
+          VITE_TRAFIKLAB_API_KEY: ${{ vars.TRAFIKLAB_API_KEY }}
         run: |
           npm ci
           npm run lint
