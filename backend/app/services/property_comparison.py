@@ -149,6 +149,8 @@ _TRANSPORT_NOTES = {
     "not_fetched": "Kollektivtrafiken har inte hämtats. Öppna bostadens sida för att hämta den.",
     "pending": "Hämtningen av kollektivtrafik avbröts eller pågår fortfarande. Öppna bostadens sida för att hämta den.",
     "stale": "Adressen har ändrats sedan kollektivtrafiken hämtades. Öppna bostadens sida för att hämta den igen.",
+    "choose": "Adressen finns på flera ställen. Välj adress på bostadens sida.",
+    "skipped": "Bostaden visas utan kollektivtrafik. Välj adress på bostadens sida för att hämta den.",
 }
 
 

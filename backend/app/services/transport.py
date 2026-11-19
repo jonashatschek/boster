@@ -4,7 +4,11 @@ The backend makes no network calls. For each step it tells the frontend which re
 make; the frontend posts back the raw response, and the backend reads it, stores what it
 found and asks for the next request:
 
-    start → geocode (Nominatim) → stops (Trafiklab ResRobot) → walking (Valhalla) → done
+    start → geocode (Nominatim) → [choose] → stops (Trafiklab ResRobot) → walking (Valhalla) → done
+
+The lookup waits at "choose" when the address is ambiguous: no municipality in the listing, or
+not exactly one hit with the listing's municipality and house number. The user then picks one
+of Nominatim's hits (which also sets the municipality) or continues without transport ("skipped").
 
 A failure at any step ends the lookup with a reason. The stored result keeps the address it
 was looked up with, so it is shown as stale once the apartment's address changes.
@@ -18,19 +22,21 @@ from sqlalchemy.orm import Session
 
 from app.domain.provenance import VerificationStatus
 from app.models import Property, TransportLookup, TransportStop
-from app.schemas import ExternalRequest, TransportInfo, TransportStep, TransportStopOut, TransportStepResult
+from app.schemas import AddressCandidate, ExternalRequest, TransportInfo, TransportStep, TransportStopOut, TransportStepResult
 from app.transport.nearby import (
-    MAX_WALKING_METRES, MAX_WALKING_TEXT, NOMINATIM_URL, RESROBOT_URL, TRANSPORT_LABELS, VALHALLA_URL, GeocodeQuery, Place, Stop,
-    TransportLookupError, TransportType, geocode_query, nearby_stops_params, nearest_per_type, parse_geocode,
-    parse_nearby_stops, parse_walking, walking_request,
+    MAX_WALKING_METRES, MAX_WALKING_TEXT, NOMINATIM_URL, RESROBOT_URL, TRANSPORT_LABELS, VALHALLA_URL, Candidate,
+    GeocodeQuery, Place, Stop, TransportLookupError, TransportType, automatic_choice, geocode_query,
+    nearby_stops_params, nearest_per_type, order_candidates, parse_candidates, parse_nearby_stops, parse_walking,
+    same_municipality, walking_request,
 )
 
-DONE, FAILED = "done", "failed"
+DONE, FAILED, CHOOSE, SKIPPED = "done", "failed", "choose", "skipped"
 SOURCE = ("Adressen: OpenStreetMap (Nominatim). Hållplatser: Trafiklab ResRobot. "
           "Gångväg och tid: OpenStreetMap (Valhalla).")
 STREET_LEVEL = ("Husnumret hittades inte i OpenStreetMap, bara gatan. Avstånden till hållplatser skulle då bli "
                 "osäkra, så de visas inte. Kontrollera adressen.")
 NOT_FETCHED = "Kollektivtrafiken har inte hämtats."
+NOT_FOUND = "Adressen hittades inte i OpenStreetMap. Kontrollera adressen och kommunen."
 
 _SERVICES = {"geocode": "OpenStreetMap", "stops": "Trafiklab", "walking": "OpenStreetMaps ruttjänst"}
 _NEXT = {"start": "geocode", "geocode": "stops", "stops": "walking", "walking": DONE}
@@ -40,6 +46,10 @@ class TransportStepError(Exception):
     """A step was sent out of order. The message is shown in the UI, in Swedish."""
 
 
+class TransportChoiceError(Exception):
+    """The chosen address isn't one of those offered. The message is shown in the UI, in Swedish."""
+
+
 def current_query(listing: Property) -> GeocodeQuery:
     return geocode_query(listing.address, listing.municipality)
 
@@ -47,6 +57,10 @@ def current_query(listing: Property) -> GeocodeQuery:
 def run_step(session: Session, listing: Property, step: TransportStep) -> TransportStepResult:
     if step.stage == "start":
         return _start(session, listing)
+    if step.stage == "skip":
+        return _skip(session, listing)
+    if step.stage == "choose":
+        return _choose(session, listing, step.choice)
 
     lookup = listing.transport
     if lookup is None or lookup.stage != step.stage:
@@ -89,14 +103,20 @@ def _receive(lookup: TransportLookup, step: TransportStep) -> ExternalRequest | 
 
     if step.stage == "geocode":
         _require_ok(step, service)  # Nominatim has no error format of its own to read first.
-        place = parse_geocode(body)
-        lookup.place_label, lookup.place_lat, lookup.place_lon = place.label, place.lat, place.lon
-        lookup.house_level = place.house_level
-        if not place.house_level:  # On a long street the distances could be far off.
+        query = current_query(lookup.property)
+        candidates, truncated = parse_candidates(body, query.limit)
+        if not candidates and body and not any(_has_house_number(hit) for hit in body):
+            lookup.house_level = False  # Only the street: on a long street the distances could be far off.
             raise TransportLookupError(STREET_LEVEL)
-        lookup.stage = "stops"
-        return ExternalRequest(stage="stops", service="resrobot", method="GET",
-                               url=f"{RESROBOT_URL}?{urlencode(nearby_stops_params(place))}", needs_key=True)
+        if not candidates:
+            raise TransportLookupError(NOT_FOUND)
+        chosen = automatic_choice(candidates, query)
+        if chosen:
+            return _continue_from(lookup, chosen)
+        lookup.stage = CHOOSE
+        lookup.candidates = [vars(c) for c in order_candidates(candidates, query)]
+        lookup.truncated = truncated
+        return None
 
     if step.stage == "stops":
         stops = parse_nearby_stops(body)
@@ -127,6 +147,62 @@ def _receive(lookup: TransportLookup, step: TransportStep) -> ExternalRequest | 
         stop.walking_seconds = walk.seconds if walk else None
     lookup.stage = DONE
     return None
+
+
+def _continue_from(lookup: TransportLookup, chosen: Candidate) -> ExternalRequest:
+    """Use this address and ask for the stops near it."""
+    place = chosen.place
+    lookup.place_label, lookup.place_lat, lookup.place_lon, lookup.house_level = place.label, place.lat, place.lon, True
+    lookup.candidates, lookup.truncated = None, None
+    lookup.stage = "stops"
+    return ExternalRequest(stage="stops", service="resrobot", method="GET",
+                           url=f"{RESROBOT_URL}?{urlencode(nearby_stops_params(place))}", needs_key=True)
+
+
+def _choose(session: Session, listing: Property, choice: int | None) -> TransportStepResult:
+    """The user picked one of the offered addresses. Its municipality becomes the apartment's, as the user's value."""
+    lookup = listing.transport
+    if lookup is None or lookup.stage != CHOOSE:
+        raise TransportStepError("Det finns inga adresser att välja bland. Ladda om sidan och försök igen.")
+    try:
+        unchanged = lookup.query == current_query(listing).text
+    except TransportLookupError:  # The address was removed.
+        unchanged = False
+    if not unchanged:
+        raise TransportStepError("Adressen har ändrats. Ladda om sidan och välj igen.")
+    if choice is None or not 0 <= choice < len(lookup.candidates or []):
+        raise TransportChoiceError("Välj en av de föreslagna adresserna.")
+    chosen = Candidate(**lookup.candidates[choice])
+    listing.municipality = chosen.municipality
+    sources = dict(listing.field_sources or {})
+    sources["municipality"] = {  # Same shape as other manual values: the user's choice wins over the listing.
+        "status": VerificationStatus.USER_ENTERED.value, "method": "address_choice",
+        "excerpt": f"Vald bland förslag från OpenStreetMap: ”{chosen.display_name}”", "note": None,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    listing.field_sources = sources
+    lookup.query = current_query(listing).text  # The lookup now matches the apartment's address.
+    request = _continue_from(lookup, chosen)
+    lookup.retrieved_at = datetime.now(timezone.utc)
+    session.commit()
+    return TransportStepResult(request=request, transport=transport_info(listing))
+
+
+def _skip(session: Session, listing: Property) -> TransportStepResult:
+    """Continue without public transport for this address. Remembered until the address changes."""
+    try:
+        query = current_query(listing)
+    except TransportLookupError as error:
+        raise TransportStepError(str(error)) from error
+    listing.transport = None
+    session.flush()
+    listing.transport = TransportLookup(query=query.text, stage=SKIPPED)
+    session.commit()
+    return TransportStepResult(request=None, transport=transport_info(listing))
+
+
+def _has_house_number(hit) -> bool:
+    return isinstance(hit, dict) and isinstance(hit.get("address"), dict) and bool(hit["address"].get("house_number"))
 
 
 def _require_ok(step: TransportStep, service: str) -> None:
@@ -163,15 +239,20 @@ def transport_info(listing: Property) -> TransportInfo:
 
     if lookup.query != query:
         status = "stale"
-    elif lookup.stage in (DONE, FAILED):
+    elif lookup.stage in (DONE, FAILED, CHOOSE, SKIPPED):
         status = lookup.stage
     else:
         status = "pending"
     message = lookup.message if lookup.stage == FAILED else None
+    offered = [Candidate(**c) for c in lookup.candidates or []] if lookup.stage == CHOOSE else []
+    if offered and listing.municipality and not any(same_municipality(listing.municipality, c) for c in offered):
+        message = f"Inga träffar i {listing.municipality}. Välj bland träffarna nedan eller kontrollera kommunen."
     return TransportInfo(
         status=status, message=message, query=query, looked_up_query=lookup.query,
         place_label=lookup.place_label, house_level=lookup.house_level, retrieved_at=lookup.retrieved_at,
         source=SOURCE, stops=_stops(lookup) if lookup.stage == DONE else [],
+        candidates=[AddressCandidate(label=c.label, municipality=c.municipality) for c in offered],
+        truncated=bool(lookup.truncated) if offered else False,
     )
 
 

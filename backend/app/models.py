@@ -171,6 +171,9 @@ class TransportLookup(Base):
     place_lat: Mapped[float | None] = mapped_column(Float)
     place_lon: Mapped[float | None] = mapped_column(Float)
     house_level: Mapped[bool | None] = mapped_column(Boolean)  # False: only the street was found.
+    # Addresses offered to the user while the lookup waits at the "choose" stage (Nominatim's hits).
+    candidates: Mapped[list | None] = mapped_column(JSON)
+    truncated: Mapped[bool | None] = mapped_column(Boolean)  # The search returned as many hits as asked for.
     retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     property: Mapped[Property] = relationship(back_populates="transport")

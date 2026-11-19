@@ -13,7 +13,7 @@ from app.schemas import (
 from app.services import properties as property_service
 from app.services import transport as transport_service
 from app.services.properties import PropertyError
-from app.services.transport import TransportStepError
+from app.services.transport import TransportChoiceError, TransportStepError
 
 router = APIRouter(prefix="/api/properties", tags=["properties"])
 
@@ -86,6 +86,8 @@ def transport_step(property_id: int, step: TransportStep, session: SessionDep):
         return transport_service.run_step(session, _load(session, property_id), step)
     except TransportStepError as error:
         raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
+    except TransportChoiceError as error:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
 
 
 @router.delete("/{property_id}", status_code=status.HTTP_204_NO_CONTENT)

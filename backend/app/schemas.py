@@ -267,9 +267,14 @@ class TransportStopOut(BaseModel):
     note: str | None
 
 
+class AddressCandidate(BaseModel):
+    label: str  # "Pilotgatan 16, Bagarmossen, Stockholms kommun".
+    municipality: str
+
+
 class TransportInfo(BaseModel):
-    # "not_fetched", "pending", "done", "failed", "stale" (the address changed) or
-    # "unavailable" (no address or municipality to look up).
+    # "not_fetched", "pending", "done", "failed", "stale" (the address changed), "choose" (waiting for the
+    # user to pick the address), "skipped" (the user continued without transport) or "unavailable" (no address).
     status: str
     message: str | None
     query: str | None  # The address that is (or would be) looked up.
@@ -279,6 +284,8 @@ class TransportInfo(BaseModel):
     retrieved_at: datetime | None
     source: str | None
     stops: list[TransportStopOut]
+    candidates: list[AddressCandidate] = []  # When status is "choose".
+    truncated: bool = False  # There may be more hits than the candidates shown.
 
 
 class ExternalRequest(BaseModel):
@@ -292,7 +299,8 @@ class ExternalRequest(BaseModel):
 
 
 class TransportStep(BaseModel):
-    stage: Literal["start", "geocode", "stops", "walking"]
+    stage: Literal["start", "geocode", "stops", "walking", "choose", "skip"]
+    choice: int | None = None  # With "choose": the index of the chosen candidate.
     status: int | None = None  # HTTP status of the response.
     body: Any = None  # The parsed JSON response (or text), untrusted.
     error: Literal["timeout", "network"] | None = None  # The call could not be made.

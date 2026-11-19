@@ -19,8 +19,16 @@ const ALLOWED_ORIGINS = new Set([
  */
 export const TRAFIKLAB_KEY: string | null = import.meta.env.VITE_TRAFIKLAB_API_KEY?.trim() || null
 
-export async function runTransportLookup(propertyId: number, key: string): Promise<TransportInfo> {
-  let result = await api.transportStep(propertyId, { stage: 'start' })
+/**
+ * Run the lookup from `first` (a new start, or the user's choice of address) until it is done,
+ * fails, or stops to let the user choose an address.
+ */
+export async function runTransportLookup(
+  propertyId: number,
+  key: string,
+  first: TransportStep = { stage: 'start' },
+): Promise<TransportInfo> {
+  let result = await api.transportStep(propertyId, first)
   while (result.request) {
     result = await api.transportStep(propertyId, await call(result.request, key))
   }

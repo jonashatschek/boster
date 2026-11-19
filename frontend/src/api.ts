@@ -290,7 +290,7 @@ export interface TransportStop {
 }
 
 export interface TransportInfo {
-  status: 'not_fetched' | 'pending' | 'done' | 'failed' | 'stale' | 'unavailable'
+  status: 'not_fetched' | 'pending' | 'done' | 'failed' | 'stale' | 'choose' | 'skipped' | 'unavailable'
   message: string | null
   query: string | null
   looked_up_query: string | null
@@ -299,6 +299,13 @@ export interface TransportInfo {
   retrieved_at: string | null
   source: string | null
   stops: TransportStop[]
+  candidates: AddressCandidate[] // When status is 'choose'.
+  truncated: boolean // There may be more hits than the candidates shown.
+}
+
+export interface AddressCandidate {
+  label: string
+  municipality: string
 }
 
 /** An HTTP call the backend asks the page to make (the Python code makes no network calls). */
@@ -312,6 +319,8 @@ export interface ExternalRequest {
 
 export type TransportStep =
   | { stage: 'start' }
+  | { stage: 'skip' }
+  | { stage: 'choose'; choice: number }
   | { stage: ExternalRequest['stage']; status: number; body: unknown }
   | { stage: ExternalRequest['stage']; error: 'timeout' | 'network' }
 

@@ -50,11 +50,11 @@ def test_new_listing_has_no_transport_yet(client):
     assert overview["transport"]["query"] == "Ringvägen 12, Stockholms kommun"
 
 
-def test_listing_without_municipality_cannot_be_looked_up(client):
-    property_id = add_listing(client, HEMNET_STYLE.replace("Södermalm, Stockholms kommun\n", ""))
+def test_listing_without_an_address_cannot_be_looked_up(client):
+    property_id = add_listing(client, HEMNET_STYLE.replace("Ringvägen 12, 3 tr\n", ""))
     transport = client.get(f"/api/properties/{property_id}").json()["transport"]
     assert transport["status"] == "unavailable"
-    assert "kommun" in transport["message"]
+    assert "adress" in transport["message"]
     response = client.post(f"/api/properties/{property_id}/transport/step", json={"stage": "start"})
     assert response.json()["request"] is None
     assert response.json()["transport"]["status"] == "unavailable"

@@ -13,6 +13,8 @@ import { ConcernBadge, StatusBadge } from '../components/Badges'
 import { DocumentUploader } from '../components/DocumentUploader'
 import { ListingDescription } from '../components/ListingDescription'
 import { TransportSection } from '../components/TransportSection'
+import { AddressChoice } from '../components/AddressChoice'
+import { useTransportLookup } from '../transport/useTransportLookup'
 import { formatDate, formatKronor, formatValue, LAND_TENURE_LABELS } from '../format'
 
 const METHOD_LABELS: Record<string, string> = {
@@ -21,6 +23,7 @@ const METHOD_LABELS: Record<string, string> = {
   structured_data: 'Annonssidans strukturerade data',
   meta_tag: 'Annonssidans metadata',
   manual: 'Manuellt angivet',
+  address_choice: 'Vald adress',
 }
 
 const RETRIEVAL_LABELS: Record<PropertyOverview['retrieval_status'], string> = {
@@ -37,6 +40,11 @@ const HEADLINE_FIELDS = ['asking_price', 'living_area', 'rooms', 'monthly_fee']
 
 export function PropertyPage() {
   const id = Number(useParams().id)
+  // A fresh instance per apartment: no state (or late lookup result) carries over to the next one.
+  return <PropertyView key={id} id={id} />
+}
+
+function PropertyView({ id }: { id: number }) {
   const navigate = useNavigate()
   const [property, setProperty] = useState<PropertyOverview | null>(null)
   const [cooperatives, setCooperatives] = useState<CooperativeListItem[]>([])
@@ -52,6 +60,16 @@ export function PropertyPage() {
 
   useEffect(load, [load])
 
+  // Runs before the early returns below (a hook). Null until this apartment has loaded.
+  const lookup = useTransportLookup(
+    id,
+    property?.id === id ? property.transport : null,
+    // A lookup that finishes after moving to another apartment must not overwrite that one.
+    (transport, forId) =>
+      setProperty((current) => (current && current.id === forId ? { ...current, transport } : current)),
+    load,
+  )
+
   if (error) return <div className="notice error">{error}</div>
   if (!property) return <p className="muted">Laddar …</p>
 
@@ -59,6 +77,33 @@ export function PropertyPage() {
   const address = field('address').value as string | null
   const title = address ?? property.title ?? 'Bostad utan adress'
   const area = [field('neighborhood').value, field('municipality').value].filter(Boolean).join(', ')
+  const municipality = field('municipality').value as string | null
+
+  // The whole page waits while the address is ambiguous: the user picks it, enters the
+  // municipality, or continues without public transport.
+  const transport = property.transport
+  const waitingForAddress =
+    lookup.hasKey &&
+    (transport.status === 'choose' ||
+      (!municipality && ['not_fetched', 'pending', 'stale'].includes(transport.status)))
+  if (waitingForAddress) {
+    return (
+      <div className="stack" style={{ gap: '1.5rem' }}>
+        <div className="small">
+          <Link to="/">← Översikt</Link>
+        </div>
+        <h1>{title}</h1>
+        <AddressChoice
+          transport={transport}
+          municipality={municipality}
+          lookup={lookup}
+          onSetMunicipality={async (value) => {
+            await act(() => api.updateProperty(property.id, { municipality: value }))
+          }}
+        />
+      </div>
+    )
+  }
 
   async function act(action: () => Promise<PropertyOverview>) {
     setError(null)
@@ -151,15 +196,7 @@ export function PropertyPage() {
 
           <CooperativeSection property={property} cooperatives={cooperatives} act={act} reload={load} />
 
-          <TransportSection
-            key={property.id}
-            propertyId={property.id}
-            transport={property.transport}
-            // A lookup that finishes after moving to another apartment must not overwrite that one.
-            onChange={(transport, forId) =>
-              setProperty((current) => (current && current.id === forId ? { ...current, transport } : current))
-            }
-          />
+          <TransportSection transport={property.transport} lookup={lookup} />
         </div>
       </div>
 
