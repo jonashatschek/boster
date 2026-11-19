@@ -168,3 +168,31 @@ def test_cooperative_name_from_link_text_is_trimmed():
     facts = extract_from_text("Dokument\nBrf Gästfriheten - Årsredovisning 2024\nStadgar\n")
     assert facts.fields["cooperative_name"].value == "Brf Gästfriheten"
     assert "Kontrollera" in facts.fields["cooperative_name"].note
+
+
+@pytest.mark.parametrize("line", [
+    "Rusthållarvägen 151 lgh 1102",  # Flat number without a comma.
+    "Ringvägen 12 3 tr",  # Floor without a comma.
+    "Götgatan 8 nb",
+    "Sveavägen 40 2 vån",
+    "Kungsholms Strand 5",  # Street word with a capital letter.
+    "RINGVÄGEN 12",  # All capitals.
+    "Tegnérlunden 4",
+    "Medborgarplatsen 3",
+    "Rålambshovsparken 2",
+    "Danvikshöjden 7",
+    "Storgatan 3 A",  # House letter after a space.
+])
+def test_more_address_forms(line):
+    facts = values(extract_from_text(f"{line}\nSödermalm, Stockholms kommun\nPris\n1 000 000 kr\n"))
+    assert facts["address"] == line
+
+
+@pytest.mark.parametrize("line", [
+    "Ringvägen 12 rum och kök",  # Words after the number that are not a floor or flat.
+    "Parkeringsplats 2",  # Not a street word.
+    "ringvägen 12",  # A street name starts with a capital letter.
+])
+def test_lines_that_are_not_addresses(line):
+    facts = values(extract_from_text(f"{line}\nSödermalm, Stockholms kommun\nPris\n1 000 000 kr\n"))
+    assert "address" not in facts

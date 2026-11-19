@@ -93,8 +93,16 @@ _SWEDISH_MONTHS = {
     "september": 9, "oktober": 10, "november": 11, "december": 12,
 }
 _STREET_SUFFIXES = (r"gatan|vägen|gränd|gränden|backe|backen|torg|torget|plan|allé|allén|stigen|stig|"
-                    r"leden|kajen|strand|stranden|esplanaden|promenaden|terrassen|liden|slingan|gången|väg|gata")
-_ADDRESS = re.compile(rf"^[A-ZÅÄÖ][\wåäöéü.\- ]*?(?:{_STREET_SUFFIXES})\s+\d+[A-Za-z]?(?:\s*[-,].*)?$")
+                    r"leden|kajen|strand|stranden|esplanaden|promenaden|terrassen|liden|slingan|gången|väg|gata|"
+                    r"lunden|platsen|parken|höjden|ringen")
+# What may follow the house number: anything after a comma or dash ("12, 3 tr"), or, without one,
+# only a flat number, a floor or a floor abbreviation ("151 lgh 1102", "12 3 tr", "8 nb").
+_ADDRESS_TAIL = r"(?:\s*[-,].*|\s+(?:lgh\.?\s*\d+|\d+\s*(?:tr|trappor|vån|våning)\.?|nb|bv|ög)\b.*)?"
+# The street word may be capitalised ("Kungsholms Strand 5", "RINGVÄGEN 12"); the name must start
+# with a capital letter. A house letter may follow the number, with or without a space ("3A", "3 A").
+_ADDRESS = re.compile(
+    rf"^[A-ZÅÄÖ][\wåäöéü.\- ]*?(?i:{_STREET_SUFFIXES})\s+\d+(?:\s?[A-Za-z])?{_ADDRESS_TAIL}$"
+)
 # "Södermalm, Stockholms kommun". The municipality is kept as printed, with "kommun":
 # removing a genitive "s" would break names such as Vännäs.
 _MUNICIPALITY_LINE = re.compile(r"^(?P<area>[^,]{2,60}),\s*(?P<municipality>[\wåäöÅÄÖ\- ]+?\s+kommun)$", re.IGNORECASE)
