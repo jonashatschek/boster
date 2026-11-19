@@ -44,11 +44,16 @@ export function TransportSection({ propertyId, transport, onChange }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoQuery, busy])
 
+  // Types without a stop within walking distance are left out of the list.
+  const found = transport.stops.filter((stop) => stop.walking_metres !== null && stop.walking_seconds !== null)
+
   return (
     <section className="card stack">
       <div className="spread">
         <h2>Kollektivtrafik</h2>
-        {key && transport.status !== 'unavailable' && (
+        {/* Only offered after a failure that a retry can fix. A missing house number needs a corrected
+            address instead, which starts a new lookup by itself. */}
+        {key && ((transport.status === 'failed' && transport.house_level !== false) || error) && (
           <button onClick={fetchTransport} disabled={busy}>
             {busy ? 'Hämtar …' : 'Hämta igen'}
           </button>
@@ -72,17 +77,17 @@ export function TransportSection({ propertyId, transport, onChange }: Props) {
               gäller den gamla adressen.
             </div>
           )}
-          {transport.house_level === false && transport.message && transport.status !== 'failed' && (
-            <div className="notice warning">{transport.message}</div>
-          )}
-          {transport.stops.length > 0 && (
+          {found.length > 0 && (
             <ul className="list">
-              {transport.stops.map((stop) => (
+              {found.map((stop) => (
                 <StopRow key={stop.type} stop={stop} />
               ))}
             </ul>
           )}
-          {transport.stops.length > 0 && (
+          {transport.stops.length > 0 && found.length === 0 && (
+            <p>Ingen tunnelbana, pendeltåg/lokaltåg eller buss inom 2 km gångavstånd.</p>
+          )}
+          {found.length > 0 && (
             <p className="small muted">
               Gångavstånd och tid till den närmaste hållplatsen fågelvägen av varje slag. Tiden kommer från
               ruttjänsten och förutsätter normal gångtakt. Pendeltåg/lokaltåg omfattar även t.ex. Roslagsbanan och
@@ -96,7 +101,8 @@ export function TransportSection({ propertyId, transport, onChange }: Props) {
                 {transport.place_label && <> → hittad som ”{transport.place_label}”</>}
               </span>
               <span>
-                {transport.source} Hämtad {formatDate(transport.retrieved_at)}.
+                {found.length > 0 ? transport.source : 'Adressen: OpenStreetMap (Nominatim).'} Hämtad{' '}
+                {formatDate(transport.retrieved_at)}.
               </span>
             </div>
           )}
@@ -119,22 +125,14 @@ function StopRow({ stop }: { stop: TransportStop }) {
     <li className="stack" style={{ gap: '0.2rem' }}>
       <div className="spread">
         <span className="small muted">{stop.label}</span>
-        {stop.walking_metres === null || stop.walking_seconds === null ? (
-          <span className="missing">Saknas</span>
-        ) : (
-          <span>
-            <strong>{stop.name}</strong>{' '}
-            {formatMetres(stop.walking_metres)} (ca {Math.max(1, Math.round(stop.walking_seconds / 60))} min) till fots
-          </span>
-        )}
+        <span>
+          <strong>{stop.name}</strong> {formatMetres(stop.walking_metres!)} (ca{' '}
+          {Math.max(1, Math.round(stop.walking_seconds! / 60))} min) till fots
+        </span>
       </div>
-      {stop.walking_metres !== null ? (
-        <div>
-          <StatusBadge status={stop.status} labels={STOP_STATUS_LABELS} />
-        </div>
-      ) : (
-        stop.note && <span className="small muted">{stop.note}</span>
-      )}
+      <div>
+        <StatusBadge status={stop.status} labels={STOP_STATUS_LABELS} />
+      </div>
     </li>
   )
 }

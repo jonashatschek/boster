@@ -17,7 +17,7 @@ CI (`.github/workflows/deploy.yml`) runs pytest, lint and build, then deploys to
 
 ## Rules that are easy to get wrong
 
-- **Never estimate, infer or interpolate a value.** Missing → "Saknas" with a reason. A balcony/elevator is recorded only if the listing states it. Chart gaps stay empty.
+- **Never estimate, infer or interpolate a value.** Missing → "Saknas" with a reason. (Exception, decided by the owner: on the property page's public transport list, a type with no stop within walking distance is left out instead. The comparison still shows "Saknas" with the reason.) A balcony/elevator is recorded only if the listing states it. Chart gaps stay empty.
 - **KPIs are computed in code** (`backend/app/domain/kpis.py`) with unit tests, never by AI.
 - **Keep provenance.** Every extracted value keeps its source (document, page, printed label, or the listing line). Don't add a value without it.
 - **Conflicts are kept, not resolved.** Disagreeing sources → status "Motstridiga uppgifter", all candidates stored.
