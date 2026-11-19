@@ -11,7 +11,7 @@ import pytest
 
 from app.transport.nearby import (
     MAX_WALKING_METRES, GeocodeQuery, Place, Stop, TransportLookupError, TransportType, geocode_query,
-    nearest_per_type, parse_geocode, parse_nearby_stops, parse_walking, walking_request,
+    nearest_per_type, parse_nearby_stops, parse_walking, walking_request,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures" / "transport"
@@ -51,53 +51,13 @@ def test_query_params_restrict_the_search_to_sweden():
     assert params["street"] == "Ringvägen 12"
     assert params["city"] == "Stockholms kommun"
     assert params["countrycodes"] == "se"
-    assert params["limit"] == "1"
+    assert params["limit"] == "5"
     assert params["accept-language"] == "sv"  # Otherwise the match is described in the browser's language.
 
 
 def test_no_query_without_an_address():
     with pytest.raises(TransportLookupError, match="adress"):
         geocode_query(None, "Stockholms kommun")
-
-
-def test_no_query_without_a_municipality():
-    # A bare street name can match a street in the wrong town.
-    with pytest.raises(TransportLookupError, match="kommun"):
-        geocode_query("Ringvägen 12", None)
-
-
-# --- Geocoding response -----------------------------------------------------------------------
-
-
-def test_house_level_match():
-    place = parse_geocode(fixture("nominatim_house.json"))
-    assert place.lat == pytest.approx(59.3171248)
-    assert place.lon == pytest.approx(18.0502604)
-    assert place.label.startswith("12, Ringvägen, Zinkensdamm")
-    assert place.house_level is True
-
-
-def test_street_level_match_is_marked():
-    place = parse_geocode(fixture("nominatim_street_only.json"))
-    assert place.house_level is False
-
-
-def test_address_not_found():
-    with pytest.raises(TransportLookupError, match="hittades inte"):
-        parse_geocode(fixture("nominatim_not_found.json"))
-
-
-@pytest.mark.parametrize("data", [None, "text", {"lat": 1}, [{"lat": "x", "lon": "18"}], [{"lon": "18.0"}]])
-def test_malformed_geocoding_response(data):
-    with pytest.raises(TransportLookupError):
-        parse_geocode(data)
-
-
-def test_match_outside_sweden_is_rejected():
-    data = fixture("nominatim_house.json")
-    data[0]["lat"], data[0]["lon"] = "52.52", "13.40"  # Berlin.
-    with pytest.raises(TransportLookupError, match="Sverige"):
-        parse_geocode(data)
 
 
 # --- Nearby stops -----------------------------------------------------------------------------

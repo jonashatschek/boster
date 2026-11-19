@@ -55,18 +55,29 @@ class TransportLookupError(Exception):
 _NOT_STREET = re.compile(r"\s+(lgh\.?\s*\d+|\d+\s*(tr|trappor|vån|våning)\.?|nb|bv|ög)\b.*$", re.IGNORECASE)
 
 
+LIMIT_WITH_MUNICIPALITY = 5  # Enough to notice that the street and number exist more than once.
+LIMIT_WITHOUT_MUNICIPALITY = 10
+
+
 @dataclass(frozen=True)
 class GeocodeQuery:
     street: str
-    city: str
+    city: str | None  # The municipality as printed in the listing; None searches all of Sweden.
 
     @property
     def text(self) -> str:
-        return f"{self.street}, {self.city}"
+        return f"{self.street}, {self.city}" if self.city else self.street
+
+    @property
+    def limit(self) -> int:
+        return LIMIT_WITH_MUNICIPALITY if self.city else LIMIT_WITHOUT_MUNICIPALITY
 
     def params(self) -> dict[str, str]:
-        return {"street": self.street, "city": self.city, "countrycodes": "se", "format": "jsonv2",
-                "addressdetails": "1", "limit": "1", "accept-language": "sv"}
+        params = {"street": self.street, "countrycodes": "se", "format": "jsonv2", "addressdetails": "1",
+                  "limit": str(self.limit), "accept-language": "sv"}
+        if self.city:
+            params["city"] = self.city  # A hint only: Nominatim also returns hits in other municipalities.
+        return params
 
 
 def geocode_query(address: str | None, municipality: str | None) -> GeocodeQuery:
@@ -74,9 +85,7 @@ def geocode_query(address: str | None, municipality: str | None) -> GeocodeQuery
     street = _NOT_STREET.sub("", (address or "").split(",")[0]).strip()
     if not street:
         raise TransportLookupError("Bostaden saknar adress, så kollektivtrafiken kan inte hämtas.")
-    if not municipality or not municipality.strip():
-        raise TransportLookupError("Bostaden saknar kommun. Ange kommunen, så att adressen inte hittas i fel ort.")
-    return GeocodeQuery(street=street, city=municipality.strip())
+    return GeocodeQuery(street=street, city=(municipality or "").strip() or None)
 
 
 @dataclass(frozen=True)
@@ -87,21 +96,102 @@ class Place:
     house_level: bool  # False when only the street, not the house number, was found.
 
 
-def parse_geocode(data) -> Place:
-    if data == []:
-        raise TransportLookupError("Adressen hittades inte i OpenStreetMap. Kontrollera adressen och kommunen.")
-    if not isinstance(data, list) or not isinstance(data[0], dict):
+@dataclass(frozen=True)
+class Candidate:
+    """One address Nominatim found, at house level, for the user to choose or for us to take."""
+
+    lat: float
+    lon: float
+    road: str
+    house_number: str
+    suburb: str | None
+    municipality: str  # As OpenStreetMap names it: "Stockholms kommun", "Göteborgs Stad".
+    display_name: str  # Nominatim's full description, kept as the source of a choice.
+
+    @property
+    def label(self) -> str:
+        return ", ".join(part for part in (f"{self.road} {self.house_number}", self.suburb, self.municipality) if part)
+
+    @property
+    def place(self) -> Place:
+        return Place(lat=self.lat, lon=self.lon, label=self.display_name, house_level=True)
+
+
+def parse_candidates(data, limit: int) -> tuple[list[Candidate], bool]:
+    """House-level hits in Sweden with a known municipality, duplicates merged.
+
+    The flag says the response was full, so there may be more hits than shown.
+    """
+    if not isinstance(data, list):
         raise TransportLookupError("Oväntat svar från OpenStreetMap (adressökning).")
-    match = data[0]
-    lat, lon = _number(match.get("lat")), _number(match.get("lon"))
-    if lat is None or lon is None:
-        raise TransportLookupError("Oväntat svar från OpenStreetMap (adressökning).")
+    candidates: dict[tuple, Candidate] = {}
+    for hit in data:
+        if isinstance(hit, dict) and (candidate := _candidate(hit)):
+            key = (candidate.road.lower(), _house_key(candidate.house_number), candidate.suburb,
+                   candidate.municipality)
+            candidates.setdefault(key, candidate)
+    return list(candidates.values()), len(data) >= limit
+
+
+def _candidate(hit: dict) -> Candidate | None:
+    lat, lon = _number(hit.get("lat")), _number(hit.get("lon"))
+    address = hit.get("address")
+    if lat is None or lon is None or not isinstance(address, dict):
+        return None
     if not (_SWEDEN[0] <= lat <= _SWEDEN[1] and _SWEDEN[2] <= lon <= _SWEDEN[3]):
-        raise TransportLookupError("Adressen hittades inte i Sverige.")
-    address = match.get("address") if isinstance(match.get("address"), dict) else {}
-    label = match.get("display_name")
-    return Place(lat=lat, lon=lon, label=label if isinstance(label, str) else "",
-                 house_level=bool(address.get("house_number")))
+        return None
+    road, number = _text(address.get("road")), _text(address.get("house_number"))
+    municipality = next((name for key in ("municipality", "city", "town", "village")
+                         if (name := _text(address.get(key)))), None)
+    if not road or not number or not municipality:
+        return None  # A street-level hit, or one we couldn't place in a municipality.
+    suburb = _text(address.get("suburb")) or _text(address.get("city_district"))
+    return Candidate(lat=lat, lon=lon, road=road, house_number=number, suburb=suburb, municipality=municipality,
+                     display_name=_text(hit.get("display_name")) or "")
+
+
+def automatic_choice(candidates: list[Candidate], query: GeocodeQuery) -> Candidate | None:
+    """The hit to use without asking, or None when the user must choose.
+
+    Only when the listing names the municipality and exactly one hit lies in it with the exact
+    house number. Nominatim's city parameter is only a hint, and "Storgatan 1A" is not "Storgatan 1".
+    """
+    if not query.city:
+        return None
+    wanted = _house_key(_house_number(query.street))
+    exact = [c for c in candidates if same_municipality(query.city, c) and _house_key(c.house_number) == wanted]
+    return exact[0] if len(exact) == 1 else None
+
+
+def order_candidates(candidates: list[Candidate], query: GeocodeQuery) -> list[Candidate]:
+    """Hits in the listing's municipality first; otherwise Nominatim's order."""
+    if not query.city:
+        return list(candidates)
+    return sorted(candidates, key=lambda c: not same_municipality(query.city, c))
+
+
+def same_municipality(listed: str, candidate: Candidate) -> bool:
+    """The listing's municipality names the hit's: "Stockholms kommun", or a city name such as "Stockholm"."""
+    listed_name, found = listed.strip().lower(), candidate.municipality.lower()
+    return found in _name_forms(listed_name) or listed_name in _name_forms(found)
+
+
+def _name_forms(name: str) -> set[str]:
+    """A place name and the municipality names built from it: "Stockholm" → "Stockholms kommun"."""
+    return {name, f"{name} kommun", f"{name}s kommun", f"{name} stad", f"{name}s stad"}
+
+
+def _house_number(street: str) -> str:
+    match = re.search(r"(\d+\s?[A-Za-z]?)$", street)
+    return match.group(1) if match else ""
+
+
+def _house_key(number: str) -> str:
+    return re.sub(r"\s+", "", number).lower()
+
+
+def _text(value) -> str | None:
+    return value.strip() if isinstance(value, str) and value.strip() else None
 
 
 # --- Nearby stops -----------------------------------------------------------------------------

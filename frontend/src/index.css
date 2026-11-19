@@ -747,3 +747,9 @@ textarea {
     padding: 1rem;
   }
 }
+
+/* An address to choose (AddressChoice): full width, text left-aligned. */
+button.choice {
+  width: 100%;
+  text-align: left;
+}
