@@ -251,9 +251,20 @@ def _parse_date(text: str) -> date | None:
     return None
 
 
+# Where the listing itself ends and other listings or the site footer begin. Addresses after
+# this point belong to other apartments or to the agency's office.
+_END_OF_LISTING = re.compile(r"^(andra har också tittat på|footer)$", re.IGNORECASE)
+
+
 def _find_address_and_area(facts: ListingFacts, lines: list[str]) -> None:
-    """Listings start with the address, followed by "Area, X kommun" or "Lägenhet · Area · City"."""
-    for line in lines[:40]:
+    """The address, then "Area, X kommun" or "Lägenhet · Area · City", come early in the listing.
+
+    Some sites put a long menu and image captions first, so the whole listing is searched,
+    but never past the start of other listings or the footer.
+    """
+    for line in lines:
+        if _END_OF_LISTING.match(line):
+            break
         if "address" not in facts.fields and _ADDRESS.match(line) and len(line) < 80:
             facts.set("address", line, line, "text_pattern")
         match = _MUNICIPALITY_LINE.match(line) or _BOOLI_LOCATION.match(line)

@@ -175,3 +175,222 @@ Belåning
 Läs mer om föreningen
 Källa: Föreningens årsredovisning (2025) via Bolagsverket. Mäklaren ansvarar ej för innehållet.
 """
+
+# An agent's own site (HusmanHagberg), copied with select-all (November 2026), abridged. The agent's name is
+# removed. The address comes after about 75 lines of menu and image captions, and other listings'
+# addresses and the agency's office address follow further down.
+AGENT_PILOTGATAN = """
+
+Hoppa till huvudinnehåll
+Bostäder till salu
+Köpa bostad
+Sälja
+Kontor
+Inspiration
+Spanien
+Sök
+Karriär
+Om oss
+Mina sidor
+Översikt
+Bilder
+Planritning
+Karta
+Boendekalkyl
+Värdera bostad
+Matplats
+Vardagsrum
+Matplats
+Kök
+Sovrum
+
+Hall
+Badrum
+Matplats
+Vardagsrum
+Vardagsrum
+Kök
+Kök
+Kök
+Kök
+Kök
+Kök
+Sovrum
+Sovrum
+Sovrum
+Matplats
+Matplats
+Matplats
+Föreningens innergård
+Föreningens innergård
+Skarpnäcks Allé
+Skarpnäcks T-bana
+Skarpnäck Coop
+ICA Skarpnäck
+Skarpnäcks Kulturhus
+Skarpnäcksparken
+Brandparken
+Park och lekområden
+Skarpnäcks sportfält
+Skarpnäcks sportfält
+Skarpnäcks utegym intill bollplanen
+Skarpnäcks utegym intill bollplanen
+Skarpnäcks utegym
+Skatepark i området
+Bergholmstorpet i närheten
+Bergolmstorpet
+Flatenbadet
+Flatenbadet
+Flatensjön
+Söderbysjön
+Söderbysjön och Nackareservatet
+Söderbysjön
+Restaurang Björken i Nackareservatet
+Vy över Skarpnäck
+Alla bilder
+1 / 49
+Budgivning
+Skarpnäck, Skarpnäck
+
+Pilotgatan 16, 1tr
+2 150 000 kr
+
+Fakta & dokument
+Fakta om bostaden
+Typ
+Lägenhet
+Upplåtelseform
+Bostadsrätt
+Antal rum
+2 rok
+Boarea
+53 kvm
+Våning
+1 av 3, hiss finns
+Lägenhetsnummer
+34
+Månadsavgift
+4 218 kr *
+Byggår
+1988
+Pris
+2 150 000 kr Utgångspris
+Kommentar till månadsavgift
+
+* inkl. Kallvatten och värme, TV och bredband. Föreningen tillämpar individuell mätning och debitering av el och varmvatten.
+
+Bevaka liknande bostäder
+Renoverad tvåa i smakfull stil med unik karaktär!
+Välkommen till en välplanerad och trivsam lägenhet där varje kvadratmeter tagits till vara. Genom smakfulla renoveringar, genomtänkta materialval och en harmonisk färgsättning har ett personligt hem med tydlig karaktär vuxit fram. Här erbjuds ett rymligt sovrum, generösa sällskapsytor och en social planlösning med plats för både matgrupp och soffgrupp. Smarta platsbyggda lösningar bidrar till god förvaring och ett funktionellt boende.
+
+Hallen erbjuder plats för avhängning av ytterkläder och skor samt förvaring i garderober. Intill hallen ligger badrummet med kaklade väggar och våtrumsmatta. Badrummet är utrustat med dusch, handdukstork och belyst spegelskåp ovanför handfatet. Här finns även förberedelse för tvättmaskin. 
+
+Bostaden är centralt och bekvämt belägen i Skarpnäck med Pilottorget precis utanför. Matbutiker, restauranger och annan vardagsservice finns på nära håll samtidigt som tunnelbanan nås på bara någon minuts promenad.
+
+Sammanfattningsvis upplevs denna bostad bäst på plats, varmt välkommen på visning!
+Läs mer om bostaden
+Bilder
+Matplats
+Vardagsrum
+Matplats
+Kök
+Visa alla bilder
+Visa planritning
+Bostadsinformation
+
+Fakta om bostaden
+
+Viktiga dokument & länkar
+
+Om området
+Karta
+Visa karta
+Stockholm Skarpnäck
+
+Pilotgatan 16, 1tr
+
+Värdera din bostad
+Fyll i formuläret så kontaktar vi dig inom kort
+
+E-post*
+Skriv in e-post
+Förnamn*
+Skriv in förnamn
+Efternamn*
+Skriv in efternamn
+Gatuadress*
+Skriv in gatuadress
+Telefon*
+Skriv in telefon
+Värdera din bostad
+Genom att klicka på knappen för att värdera din bostad så godkänner du användarvillkoren och personuppgiftspolicyn
+
+Visningar
+söndag 29 november
+13:00 - 13:30
+För bättre service, boka in dig för visning på mäklarens hemsida.
+
+Lägg till i kalender
+Boka visning
+Jag vill veta mer om bostaden
+Värdera din bostad
+Budgivning
+Visa budhistorik
+Utgångspris
+2 150 000 kr
+Högsta bud
+2 090 000 kr
+Bevaka slutpris
+Ansvarig mäklare
+Mäklarens profilbild
+[Mäklarens namn]
+Reg. Fastighetsmäklare, Franchisetagare
+
+Svenska flagga
+English flagga
+Kontakta mig
+Till mäklarkontoret
+Boendekalkyl
+Se din boendekostnad direkt. Framräknad kostnad är en indikation på vilken boendekostnad ni kan få efter era förutsättningar.
+
+Uppskattat slutpris
+2 090 000
+kr
+
+Kontantinsats
+10 %
+209 000
+kr
+Andra har också tittat på
+
+1 / 3
+
+Korphoppsgatan 22
+Visas sön 22/11, mån 23/11
+Budgivning
+Hammarby Sjöstad, Stockholm
+
+Korphoppsgatan 22
+1 rum,
+38 kvm
+2 795 000 kr
+Perstorpsvägen 112B, 4tr
+Budgivning
+Sköndal, Farsta
+
+Perstorpsvägen 112B, 4tr
+2 rum,
+54.5 kvm
+2 195 000 kr
+Footer
+HusmanHagberg AB
+Nybrogatan 12, 2 tr
+114 39 Stockholm
+
+Org.nr: 556544-7579
+Navigering
+Köpa
+Sälja
+Användarvillkor·Tillgänglighet·Länk till webbmaster·Information om kakor (cookies)·Till Mäklarbokningen
+Version 3.41.1
+"""
