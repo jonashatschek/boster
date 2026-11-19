@@ -17,6 +17,7 @@ from app.schemas import (
     CooperativeListItem, DerivedValue, LinkedCooperative, PropertyField, PropertyListItem, PropertyOverview,
 )
 from app.services.cooperatives import CORE_METRICS, build_overview, list_cooperatives, load_cooperative
+from app.services.transport import transport_info
 
 
 class RetrievalStatus(StrEnum):
@@ -264,6 +265,7 @@ def build_property_overview(session: Session, listing: Property, rules: RiskRule
         cooperative=linked, cooperative_suggestions=suggestions,
         missing=list(missing_important_fields(listing).values()),
         has_listing_text=bool(listing.listing_text),
+        transport=transport_info(listing),
     )
 
 

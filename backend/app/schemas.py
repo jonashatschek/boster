@@ -1,6 +1,7 @@
 """API request and response models."""
 
 from datetime import date, datetime
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -253,6 +254,55 @@ class LinkedCooperative(BaseModel):
     completeness_total: int
 
 
+class TransportStopOut(BaseModel):
+    """The nearest stop of one transport type, or why there is none."""
+
+    type: str  # TransportType value.
+    label: str  # "Tunnelbana", "Pendeltåg/lokaltåg", "Buss".
+    status: str  # "extracted" when found, "missing" otherwise.
+    name: str | None
+    walking_metres: int | None  # From the routing service, never estimated.
+    walking_seconds: int | None
+    straight_metres: int | None  # Trafiklab's distance, shown for context.
+    note: str | None
+
+
+class TransportInfo(BaseModel):
+    # "not_fetched", "pending", "done", "failed", "stale" (the address changed) or
+    # "unavailable" (no address or municipality to look up).
+    status: str
+    message: str | None
+    query: str | None  # The address that is (or would be) looked up.
+    looked_up_query: str | None  # The address the stored result was looked up with.
+    place_label: str | None
+    house_level: bool | None
+    retrieved_at: datetime | None
+    source: str | None
+    stops: list[TransportStopOut]
+
+
+class ExternalRequest(BaseModel):
+    """An HTTP call for the frontend to make. The backend itself makes no network calls."""
+
+    stage: str  # Send the response back with this stage.
+    service: str  # "nominatim", "resrobot", "valhalla".
+    method: str
+    url: str
+    needs_key: bool  # The frontend adds the user's Trafiklab key as `accessId`.
+
+
+class TransportStep(BaseModel):
+    stage: Literal["start", "geocode", "stops", "walking"]
+    status: int | None = None  # HTTP status of the response.
+    body: Any = None  # The parsed JSON response (or text), untrusted.
+    error: Literal["timeout", "network"] | None = None  # The call could not be made.
+
+
+class TransportStepResult(BaseModel):
+    request: ExternalRequest | None  # The next call to make, or None when finished.
+    transport: TransportInfo
+
+
 class PropertyOverview(BaseModel):
     id: int
     title: str | None
@@ -270,6 +320,7 @@ class PropertyOverview(BaseModel):
     cooperative_suggestions: list[CooperativeListItem]
     missing: list[str]  # Labels of important facts that are missing.
     has_listing_text: bool
+    transport: TransportInfo
 
 
 class PropertyListItem(BaseModel):

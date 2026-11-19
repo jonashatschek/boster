@@ -12,6 +12,7 @@ import {
 import { ConcernBadge, StatusBadge } from '../components/Badges'
 import { DocumentUploader } from '../components/DocumentUploader'
 import { ListingDescription } from '../components/ListingDescription'
+import { TransportSection } from '../components/TransportSection'
 import { formatDate, formatKronor, formatValue, LAND_TENURE_LABELS } from '../format'
 
 const METHOD_LABELS: Record<string, string> = {
@@ -149,6 +150,16 @@ export function PropertyPage() {
           </section>
 
           <CooperativeSection property={property} cooperatives={cooperatives} act={act} reload={load} />
+
+          <TransportSection
+            key={property.id}
+            propertyId={property.id}
+            transport={property.transport}
+            // A lookup that finishes after moving to another apartment must not overwrite that one.
+            onChange={(transport, forId) =>
+              setProperty((current) => (current && current.id === forId ? { ...current, transport } : current))
+            }
+          />
         </div>
       </div>
 

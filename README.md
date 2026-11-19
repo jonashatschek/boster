@@ -4,7 +4,7 @@ A personal web app for evaluating apartments for sale in Sweden (*bostadsrätter
 
 Upload a cooperative's annual report (*årsredovisning*) as a PDF. Boster reads the key figures and financial statements, calculates its own KPIs, rates the main financial risks with documented rules, and shows where every number came from, down to the page in the PDF.
 
-Boster runs entirely in the browser. It is a static website with no server and no database to set up: the Python analysis code runs in the visitor's browser with [Pyodide](https://pyodide.org), PDFs are read with [pdf.js](https://mozilla.github.io/pdf.js/), and each visitor's data is saved in their own browser. Nothing is uploaded anywhere.
+Boster runs entirely in the browser. It is a static website with no server and no database to set up: the Python analysis code runs in the visitor's browser with [Pyodide](https://pyodide.org), PDFs are read with [pdf.js](https://mozilla.github.io/pdf.js/), and each visitor's data is saved in their own browser. Nothing is uploaded anywhere, except an apartment's address when its nearby public transport is looked up.
 
 The user interface is in Swedish. Code and documentation are in English.
 
@@ -21,6 +21,7 @@ The full product specification is in [specs/spec.md](specs/spec.md).
 | 3b | Runs in the browser as a static site; export and import of all data | Done |
 | 4 | Swedish AI summaries with links to the evidence | Next (needs a way to call an AI model without a server holding the key) |
 | 5 | Comparing properties side by side, and saved comparisons | Compare side by side: done. Saved comparisons: planned |
+| 5b | Public transport: walking distance to the nearest tunnelbana, pendeltåg/lokaltåg and bus stop | Done |
 
 ## What it does today
 
@@ -33,6 +34,7 @@ The full product specification is in [specs/spec.md](specs/spec.md).
 - **Links to the cooperative** automatically, but only on an exact name match ("BRF Segelflygaren" = "HSB Bostadsrättsförening Segelflygaren i Stockholm", while "Byamännen" ≠ "Byamännen 2"). Similar names are suggested for you to confirm. A report uploaded later links any waiting listings with a matching name.
 - **Calculates** price per m², annual fee per m², the apartment's approximate share of the cooperative's loans, and the possible fee increase if interest rates rise by one percentage point. The formula and inputs are shown for each.
 - **Shows the agent's description verbatim** and marks it as claims, not facts.
+- **Shows public transport nearby:** the nearest tunnelbana, pendeltåg/lokaltåg and bus stop, with the walking distance and time there. The address is looked up in OpenStreetMap ([Nominatim](https://nominatim.org)), the stops come from Trafiklab's [ResRobot](https://www.trafiklab.se/api/our-apis/resrobot-v21/), and the walking route from OpenStreetMap's routing service ([Valhalla](https://valhalla1.openstreetmap.de)). For each type, the stop nearest in a straight line is routed; a stop more than 2 km away on foot is shown as "Saknas" with the reason, never as an estimate. The walking time is the routing service's, not a guess. It runs automatically when the property page opens, and again when the address changes (a result for an old address is marked as such). If OpenStreetMap only knows the street, not the house number, that is shown. You need your own free Trafiklab key (ResRobot v2.1), which is kept only in your browser. "Pendeltåg/lokaltåg" is Trafiklab's local-train class, which also includes e.g. Roslagsbanan and Saltsjöbanan. The comparison shows the nearest stop of each type too.
 - **Compares apartments:** tick 2–4 apartments on the dashboard and choose *Jämför*. The apartments are shown side by side, grouped into the apartment itself, location, features, the cooperative (its overall rating and each risk-rated key figure for its latest year), estimates and maintenance. Every value keeps its status badge and its source (the listing line, the formula, or the report page); missing values show as "Saknas" with the reason, never as zero. The loan share and the possible fee increase are marked as estimates, and the page warns when they rest on different debt measures (per m² of total area vs. tenant-owned area). Maintenance shows which topics the cooperative's reports mention, with page numbers, and the quotes on request. Apartments are not ranked. The selection is kept in the URL (`#/jamfor/bostader?ids=1,3`).
 
 ### Cooperatives
@@ -65,7 +67,7 @@ Every value has one of these statuses, and the UI always shows which:
 
 ## Your data
 
-Each visitor's data (a SQLite database and their PDFs) is saved in their own browser, in IndexedDB. It is never sent anywhere, and other visitors can't see it.
+Each visitor's data (a SQLite database and their PDFs) is saved in their own browser, in IndexedDB. It is never sent anywhere, and other visitors can't see it. The one exception is the public transport lookup: it sends the apartment's address (street, number and municipality) to OpenStreetMap and its coordinates to Trafiklab and OpenStreetMap's routing service. The page says so.
 
 - **Exportera** (top right) downloads everything as a zip file: the database and the PDFs.
 - **Importera** replaces everything in this browser with an exported file. Use it to move to another computer or browser, to restore a backup, or to share your analysis with someone.
@@ -141,6 +143,7 @@ backend/
     domain/       Pure logic: metric catalogue, KPI formulas, conflict resolution, risk rules
     documents/    PDF text to positioned rows, year-column tables, annual-report extraction
     listings/     Listing import: text label/value extraction
+    transport/    Public transport: queries and parsing of Nominatim, ResRobot and Valhalla responses
     services/     Document ingestion, cooperative analysis, export and import
     api/          FastAPI routes
     browser.py    Entry point for the browser (Pyodide)
@@ -154,6 +157,7 @@ frontend/
     components/   Uploader, value details dialog, charts, badges, export/import
     python/       Web Worker running Pyodide, and the client that talks to it
     pdf/          Reading page text with pdf.js
+    transport/    Makes the public transport requests the backend asks for
     api.ts        Typed API client      format.ts  Swedish formatting and labels
 specs/spec.md     Product specification
 ```
@@ -168,6 +172,7 @@ specs/spec.md     Product specification
 - **Extraction is conservative.** A value is extracted only when its row label matches a known pattern. Template quirks are handled explicitly: some report templates print `0` for key figures that weren't yet mandatory, and Boster treats that as "not reported" and shows a warning.
 - **Uploaded documents and imported files are untrusted.** Only PDFs are accepted, within a size limit, and nothing in them is executed. An import must contain exactly the files an export writes, and its database is checked before it replaces anything.
 - **The analysis runs in the browser, not on a server.** That makes the site free to host, keeps each visitor's data private without accounts, and means there is no server to maintain. The price is a slower first visit (Python is downloaded once) and no fetching of web pages.
+- **The Python code makes no network calls.** For the public transport lookup it tells the page which request to make next; the page makes it and hands back the raw response, which Python parses as untrusted input and stores with the address it was looked up with and the retrieval date. The page only calls the three known services, and adds the visitor's Trafiklab key itself, so the key never enters the database or an export.
 
 ## Known limitations
 
@@ -175,6 +180,6 @@ specs/spec.md     Product specification
 - **The total area is often missing.** Many reports state areas in formats that Boster doesn't recognise yet. Enter the area by hand (click the value, or *Ange* under *Fullständighet*) to enable the per-m² calculations.
 - **HSB cooperatives' cash looks too low.** HSB cooperatives keep most of their cash in an account held by HSB, which the report lists as a receivable. Their *Kassa och bank* figure is therefore small.
 - **Listings must be pasted.** The text extractor is tested on the layouts Hemnet, Booli and agents' sites produce when copied, but a site redesign can break it. Missing fields are listed so you can fill them in.
-- **No public transport yet.** It needs geocoding and Trafiklab routing, which come after the AI step.
+- **Public transport covers only the nearest stop of each type.** It doesn't rank stops by how useful their connections are, show departures, or give travel times to a destination. The stop nearest in a straight line is the one routed, so in rare cases another stop could be closer on foot. Trams, regional trains and ferries are not shown.
 - **Data lives in one browser.** There are no accounts and no sync. Use export and import to move data between devices.
 - **The first visit is slow.** Starting Python takes 10–20 seconds the first time; later visits use the browser's cache.

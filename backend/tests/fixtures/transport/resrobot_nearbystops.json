@@ -1,0 +1,70 @@
+{
+ "stopLocationOrCoordLocation": [
+  {
+   "StopLocation": {
+    "productAtStop": [
+     {
+      "cls": "32"
+     },
+     {
+      "cls": "128"
+     }
+    ],
+    "id": "A=1@O=Zinkensdamm T-bana (Stockholm kn)@L=740021710@",
+    "extId": "740021710",
+    "name": "Zinkensdamm T-bana (Stockholm kn)",
+    "lon": 18.0491884,
+    "lat": 59.3178312,
+    "weight": 6000,
+    "dist": 99,
+    "products": 160
+   }
+  },
+  {
+   "StopLocation": {
+    "productAtStop": [
+     {
+      "cls": "32"
+     },
+     {
+      "cls": "128"
+     }
+    ],
+    "id": "A=1@O=Hornstull T-bana (Stockholm kn)@L=740021697@",
+    "extId": "740021697",
+    "name": "Hornstull T-bana (Stockholm kn)",
+    "lon": 18.0367108,
+    "lat": 59.3164202,
+    "weight": 7000,
+    "dist": 773,
+    "products": 160
+   }
+  },
+  {
+   "StopLocation": {
+    "productAtStop": [
+     {
+      "cls": "4"
+     },
+     {
+      "cls": "16"
+     },
+     {
+      "cls": "128"
+     }
+    ],
+    "id": "A=1@O=Stockholm Södra station (Stockholm kn)@L=740000769@",
+    "extId": "740000769",
+    "name": "Stockholm Södra station (Stockholm kn)",
+    "lon": 18.0605613,
+    "lat": 59.3133461,
+    "weight": 12000,
+    "dist": 720,
+    "products": 148
+   }
+  }
+ ],
+ "serverVersion": "2.45",
+ "dialectVersion": "2.45",
+ "requestId": "fixture"
+}

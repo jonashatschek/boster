@@ -276,6 +276,50 @@ export interface LinkedCooperative {
   completeness_total: number
 }
 
+export type TransportType = 'subway' | 'commuter_train' | 'bus'
+
+export interface TransportStop {
+  type: TransportType
+  label: string
+  status: VerificationStatus
+  name: string | null
+  walking_metres: number | null
+  walking_seconds: number | null
+  straight_metres: number | null
+  note: string | null
+}
+
+export interface TransportInfo {
+  status: 'not_fetched' | 'pending' | 'done' | 'failed' | 'stale' | 'unavailable'
+  message: string | null
+  query: string | null
+  looked_up_query: string | null
+  place_label: string | null
+  house_level: boolean | null
+  retrieved_at: string | null
+  source: string | null
+  stops: TransportStop[]
+}
+
+/** An HTTP call the backend asks the page to make (the Python code makes no network calls). */
+export interface ExternalRequest {
+  stage: 'geocode' | 'stops' | 'walking'
+  service: 'nominatim' | 'resrobot' | 'valhalla'
+  method: 'GET'
+  url: string
+  needs_key: boolean
+}
+
+export type TransportStep =
+  | { stage: 'start' }
+  | { stage: ExternalRequest['stage']; status: number; body: unknown }
+  | { stage: ExternalRequest['stage']; error: 'timeout' | 'network' }
+
+export interface TransportStepResult {
+  request: ExternalRequest | null
+  transport: TransportInfo
+}
+
 export interface PropertyOverview {
   id: number
   title: string | null
@@ -293,6 +337,7 @@ export interface PropertyOverview {
   cooperative_suggestions: CooperativeListItem[]
   missing: string[]
   has_listing_text: boolean
+  transport: TransportInfo
 }
 
 export interface PropertyListItem {
@@ -365,6 +410,8 @@ export const api = {
     request<PropertyComparison>(`/api/comparisons/properties?ids=${encodeURIComponent(ids)}`),
   listProperties: () => request<PropertyListItem[]>('/api/properties'),
   getProperty: (id: number) => request<PropertyOverview>(`/api/properties/${id}`),
+  transportStep: (id: number, step: TransportStep) =>
+    request<TransportStepResult>(`/api/properties/${id}/transport/step`, json('POST', step)),
   addPropertyFromText: (text: string, url?: string) =>
     request<PropertyOverview>('/api/properties/from-text', json('POST', { text, url: url || undefined })),
   addPropertyText: (id: number, text: string) =>

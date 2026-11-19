@@ -26,7 +26,7 @@ CI (`.github/workflows/deploy.yml`) runs pytest, lint and build, then deploys to
 - **Extraction is conservative:** only extract when a row label matches a known pattern. New report template quirks get explicit handling plus a regression test.
 - **Cooperatives are identified by organisation number**, and names only link on exact match (similar names are suggested, never merged).
 - **Language:** UI text in Swedish; code, comments, docs and commit messages in English.
-- **Browser constraints:** the app can't fetch other websites or hold secrets; anything added to `backend/app` must work under Pyodide (no native-only packages, no network calls).
+- **Browser constraints:** anything added to `backend/app` must work under Pyodide (no native-only packages, no network calls). The only outside calls are the public transport lookup, made by the frontend (`frontend/src/transport/runLookup.ts`) to Nominatim, Trafiklab ResRobot and Valhalla; the backend says which request to make and parses the raw responses as untrusted input. The app holds no secrets: a Trafiklab key is the visitor's own, kept in their browser's localStorage and never exported.
 - Uploaded PDFs and imported files are untrusted input.
 
 ## How to work

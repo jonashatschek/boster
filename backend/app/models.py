@@ -149,3 +149,50 @@ class Property(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
 
     cooperative: Mapped[HousingCooperative | None] = relationship(back_populates="properties")
+    transport: Mapped["TransportLookup | None"] = relationship(
+        back_populates="property", cascade="all, delete-orphan", uselist=False
+    )
+
+
+class TransportLookup(Base):
+    """The latest public transport lookup for an apartment, with what was asked and what was found.
+
+    The query is kept so that a result can be recognised as stale when the address changes.
+    """
+
+    __tablename__ = "transport_lookups"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    property_id: Mapped[int] = mapped_column(ForeignKey("properties.id", ondelete="CASCADE"), unique=True)
+    query: Mapped[str] = mapped_column(String(300))  # The address as looked up: "Ringvägen 12, Stockholms kommun".
+    stage: Mapped[str] = mapped_column(String(20))  # Next expected response, or "done" / "failed".
+    message: Mapped[str | None] = mapped_column(Text)  # Why the lookup failed.
+    place_label: Mapped[str | None] = mapped_column(Text)  # The match found by Nominatim.
+    place_lat: Mapped[float | None] = mapped_column(Float)
+    place_lon: Mapped[float | None] = mapped_column(Float)
+    house_level: Mapped[bool | None] = mapped_column(Boolean)  # False: only the street was found.
+    retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    property: Mapped[Property] = relationship(back_populates="transport")
+    stops: Mapped[list["TransportStop"]] = relationship(
+        back_populates="lookup", cascade="all, delete-orphan", order_by="TransportStop.id"
+    )
+
+
+class TransportStop(Base):
+    """The nearest stop of one transport type (by straight line), and the walk there if routed."""
+
+    __tablename__ = "transport_stops"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    lookup_id: Mapped[int] = mapped_column(ForeignKey("transport_lookups.id", ondelete="CASCADE"), index=True)
+    transport_type: Mapped[str] = mapped_column(String(20))  # TransportType value.
+    name: Mapped[str] = mapped_column(String(200))  # As given by Trafiklab.
+    ext_id: Mapped[str] = mapped_column(String(40))  # Trafiklab's stop id.
+    lat: Mapped[float] = mapped_column(Float)
+    lon: Mapped[float] = mapped_column(Float)
+    straight_metres: Mapped[int] = mapped_column(Integer)  # Trafiklab's distance from the address.
+    walking_metres: Mapped[int | None] = mapped_column(Integer)  # From the routing service; None if no route.
+    walking_seconds: Mapped[int | None] = mapped_column(Integer)
+
+    lookup: Mapped[TransportLookup] = relationship(back_populates="stops")
