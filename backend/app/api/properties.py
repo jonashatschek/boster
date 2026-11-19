@@ -8,10 +8,12 @@ from app.domain.risk import RiskRules
 from app.models import HousingCooperative, Property
 from app.schemas import (
     PropertyCooperativeLink, PropertyFromText, PropertyListItem, PropertyOverview, PropertyText,
-    PropertyUpdate,
+    PropertyUpdate, TransportStep, TransportStepResult,
 )
 from app.services import properties as property_service
+from app.services import transport as transport_service
 from app.services.properties import PropertyError
+from app.services.transport import TransportStepError
 
 router = APIRouter(prefix="/api/properties", tags=["properties"])
 
@@ -75,6 +77,15 @@ def link_cooperative(property_id: int, request: PropertyCooperativeLink, session
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Föreningen finns inte.")
     property_service.link_cooperative(session, listing, cooperative)
     return property_service.build_property_overview(session, listing, rules)
+
+
+@router.post("/{property_id}/transport/step", response_model=TransportStepResult)
+def transport_step(property_id: int, step: TransportStep, session: SessionDep):
+    """One step of the public transport lookup: read a response and say which request to make next."""
+    try:
+        return transport_service.run_step(session, _load(session, property_id), step)
+    except TransportStepError as error:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(error)) from error
 
 
 @router.delete("/{property_id}", status_code=status.HTTP_204_NO_CONTENT)

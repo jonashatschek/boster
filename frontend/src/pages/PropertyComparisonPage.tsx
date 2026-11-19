@@ -20,6 +20,8 @@ const LINK_LABELS: Partial<Record<VerificationStatus, string>> = {
   extracted: 'Kopplad på namn',
   user_entered: 'Kopplad manuellt',
 }
+// Nearest stops come from Trafiklab and OpenStreetMap, not from the listing.
+const TRANSPORT_LABELS: Partial<Record<VerificationStatus, string>> = { extracted: 'Från Trafiklab/OpenStreetMap' }
 const COOPERATIVE_UNITS = new Set(['kr/kvm', '%', 'ggr', 'kvm'])
 
 export function PropertyComparisonPage() {
@@ -168,13 +170,19 @@ function CellValue({ row, cell }: { row: PropertyComparisonRow; cell: PropertyCo
       </span>
     )
   }
-  const isListing = !row.key.startsWith('risk:') && row.key !== 'cooperative'
+  const labels = row.key === 'cooperative'
+    ? LINK_LABELS
+    : row.key.startsWith('transport:')
+      ? TRANSPORT_LABELS
+      : row.key.startsWith('risk:')
+        ? undefined
+        : LISTING_LABELS
   return (
     <span title={title || undefined}>
       <span className={cell.status === 'calculated' ? 'calculated-text' : undefined}>{formatCell(row, cell)}</span>
       {row.key.startsWith('risk:') && cell.level_label && <div className="small">{cell.level_label}</div>}
       <div>
-        <StatusBadge status={cell.status} labels={row.key === 'cooperative' ? LINK_LABELS : isListing ? LISTING_LABELS : undefined} />
+        <StatusBadge status={cell.status} labels={labels} />
       </div>
     </span>
   )

@@ -18,6 +18,8 @@ from app.schemas import (
 )
 from app.services.cooperatives import build_overview, load_cooperative
 from app.services.properties import FIELDS, derived_values, listing_field, missing_important_fields
+from app.services.transport import format_walk, transport_info
+from app.transport.nearby import TRANSPORT_LABELS, TransportType
 
 MIN_PROPERTIES = 2
 MAX_PROPERTIES = 4
@@ -64,6 +66,8 @@ def compare_properties(session: Session, listings: list[Property], rules: RiskRu
     for group, keys in _LAYOUT:
         rows += [_derived_row(key, group, apartments) if key in _CALCULATED else _field_row(key, group, apartments)
                  for key in keys]
+        if group == "Läge":
+            rows += _transport_rows(apartments)
     rows += _cooperative_rows(apartments, rules)
     rows += [_derived_row(key, "Uppskattningar", apartments, is_estimate=True) for key in _ESTIMATES]
     rows.append(_field_row("fee_changes", "Underhåll", apartments))
@@ -139,6 +143,41 @@ def _maintenance_row(apartments: list[_Apartment]) -> PropertyComparisonRow:
     return PropertyComparisonRow(key="maintenance_topics", group="Underhåll",
                                  label="Underhåll och lån enligt årsredovisningen", kind="findings", unit=None,
                                  cells=cells)
+
+
+_TRANSPORT_NOTES = {
+    "not_fetched": "Kollektivtrafiken har inte hämtats. Öppna bostadens sida för att hämta den.",
+    "pending": "Hämtningen av kollektivtrafik avbröts eller pågår fortfarande. Öppna bostadens sida för att hämta den.",
+    "stale": "Adressen har ändrats sedan kollektivtrafiken hämtades. Öppna bostadens sida för att hämta den igen.",
+}
+
+
+def _transport_rows(apartments: list[_Apartment]) -> list[PropertyComparisonRow]:
+    """The nearest metro, local train and bus stop, with the walk there, as on the property page."""
+    infos = [transport_info(apartment.listing) for apartment in apartments]
+    rows = []
+    for kind in TransportType:
+        cells = []
+        for apartment, info in zip(apartments, infos):
+            property_id = apartment.listing.id
+            if info.status != "done":
+                note = _TRANSPORT_NOTES.get(info.status) or info.message
+                cells.append(PropertyComparisonCell(property_id=property_id, value=None, status=MISSING, note=note))
+                continue
+            stop = next(s for s in info.stops if s.type == kind.value)
+            if stop.walking_metres is None:
+                cells.append(PropertyComparisonCell(property_id=property_id, value=None, status=MISSING,
+                                                    note=stop.note))
+                continue
+            value = f"{stop.name}, {format_walk(stop.walking_metres, stop.walking_seconds)} till fots"
+            excerpt = (f"{info.source} Hämtad {info.retrieved_at:%Y-%m-%d} för ”{info.looked_up_query}”. "
+                       f"Närmaste hållplats fågelvägen; gångvägen är beräknad dit.")
+            cells.append(PropertyComparisonCell(property_id=property_id, value=value, status=stop.status,
+                                                excerpt=excerpt, note=info.message))
+        rows.append(PropertyComparisonRow(key=f"transport:{kind.value}", group="Läge",
+                                          label=f"Närmaste {TRANSPORT_LABELS[kind].lower()}", kind="text", unit=None,
+                                          cells=cells))
+    return rows
 
 
 def _no_cooperative_note(listing: Property) -> str:

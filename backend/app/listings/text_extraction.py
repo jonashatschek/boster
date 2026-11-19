@@ -93,8 +93,16 @@ _SWEDISH_MONTHS = {
     "september": 9, "oktober": 10, "november": 11, "december": 12,
 }
 _STREET_SUFFIXES = (r"gatan|vägen|gränd|gränden|backe|backen|torg|torget|plan|allé|allén|stigen|stig|"
-                    r"leden|kajen|strand|stranden|esplanaden|promenaden|terrassen|liden|slingan|gången|väg|gata")
-_ADDRESS = re.compile(rf"^[A-ZÅÄÖ][\wåäöéü.\- ]*?(?:{_STREET_SUFFIXES})\s+\d+[A-Za-z]?(?:\s*[-,].*)?$")
+                    r"leden|kajen|strand|stranden|esplanaden|promenaden|terrassen|liden|slingan|gången|väg|gata|"
+                    r"lunden|platsen|parken|höjden|ringen")
+# What may follow the house number: anything after a comma or dash ("12, 3 tr"), or, without one,
+# only a flat number, a floor or a floor abbreviation ("151 lgh 1102", "12 3 tr", "8 nb").
+_ADDRESS_TAIL = r"(?:\s*[-,].*|\s+(?:lgh\.?\s*\d+|\d+\s*(?:tr|trappor|vån|våning)\.?|nb|bv|ög)\b.*)?"
+# The street word may be capitalised ("Kungsholms Strand 5", "RINGVÄGEN 12"); the name must start
+# with a capital letter. A house letter may follow the number, with or without a space ("3A", "3 A").
+_ADDRESS = re.compile(
+    rf"^[A-ZÅÄÖ][\wåäöéü.\- ]*?(?i:{_STREET_SUFFIXES})\s+\d+(?:\s?[A-Za-z])?{_ADDRESS_TAIL}$"
+)
 # "Södermalm, Stockholms kommun". The municipality is kept as printed, with "kommun":
 # removing a genitive "s" would break names such as Vännäs.
 _MUNICIPALITY_LINE = re.compile(r"^(?P<area>[^,]{2,60}),\s*(?P<municipality>[\wåäöÅÄÖ\- ]+?\s+kommun)$", re.IGNORECASE)
@@ -243,9 +251,20 @@ def _parse_date(text: str) -> date | None:
     return None
 
 
+# Where the listing itself ends and other listings or the site footer begin. Addresses after
+# this point belong to other apartments or to the agency's office.
+_END_OF_LISTING = re.compile(r"^(andra har också tittat på|footer)$", re.IGNORECASE)
+
+
 def _find_address_and_area(facts: ListingFacts, lines: list[str]) -> None:
-    """Listings start with the address, followed by "Area, X kommun" or "Lägenhet · Area · City"."""
-    for line in lines[:40]:
+    """The address, then "Area, X kommun" or "Lägenhet · Area · City", come early in the listing.
+
+    Some sites put a long menu and image captions first, so the whole listing is searched,
+    but never past the start of other listings or the footer.
+    """
+    for line in lines:
+        if _END_OF_LISTING.match(line):
+            break
         if "address" not in facts.fields and _ADDRESS.match(line) and len(line) < 80:
             facts.set("address", line, line, "text_pattern")
         match = _MUNICIPALITY_LINE.match(line) or _BOOLI_LOCATION.match(line)
