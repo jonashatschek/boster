@@ -29,16 +29,18 @@ For each acceptance criterion:
 
 Frontend has no test runner: keep logic in testable backend code where it belongs, and verify the UI in step 5.
 
-## 5. Verify
-- Backend: full `pytest -q`. Frontend: `npm run lint`, `npx tsc -b`, `npm run build`.
-- UI changes: run `npm run dev` and check the real flow in the browser (Claude in Chrome if available), including empty/missing-data states ("Saknas").
-- Check the result against each acceptance criterion from step 2.
+## 5. Verify (independent QA)
+- Run full `pytest -q` yourself first, so QA doesn't start on a broken build.
+- Hand off to the `qa` agent (`.claude/agents/qa.md`) with the Agent tool. Give it: the issue number, the numbered acceptance criteria from step 2 (with the owner's answers), the changed files, and what you already verified. Don't give it your reasoning or tell it what result to expect.
+- Don't use the browser or edit files while it runs. Wait for its report.
+- Act on the report: fix each real problem (backend fixes start with a failing test), then send the same agent a follow-up message to re-test what changed. Explain any finding you reject. Repeat until it passes or only unverifiable items remain.
 
 ## 6. Self-review
 - Run the `code-review` skill on the diff. Fix real findings; explain any you reject.
 - Check the CLAUDE.md rules: no estimated values, provenance kept, Swedish UI / English code.
+- If a fix in this step changes behaviour, ask the `qa` agent to re-test the affected criteria.
 
 ## 7. Wrap up
 - Update the README (status table, "What it does today") if behaviour changed.
 - Propose a commit message ending in `Fixes #$ARGUMENTS`. Don't commit or push unless the user says so.
-- Report: what changed, how each acceptance criterion was verified, what was **not** verified, and proposed follow-up issues.
+- Report: what changed, how each acceptance criterion was verified (including the QA agent's verdict), what was **not** verified, test data QA left in the browser, and proposed follow-up issues.
