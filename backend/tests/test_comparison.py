@@ -115,6 +115,13 @@ def test_rejects_invalid_selection(client, ids):
     assert client.get("/api/comparisons/cooperatives", params={"ids": ids}).status_code == 422
 
 
+def test_invalid_id_is_reported_not_dropped(client, two_cooperatives):
+    # The comparison page passes the ids exactly as written in the URL and shows this message.
+    response = client.get("/api/comparisons/cooperatives", params={"ids": f"{two_cooperatives[0]},abc"})
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Ogiltiga förenings-id."
+
+
 def test_unknown_cooperative_is_not_found(client, two_cooperatives):
     assert compare(client, two_cooperatives[0], 999).status_code == 404
 
