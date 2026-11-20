@@ -135,6 +135,21 @@ def test_invalid_id_is_reported_not_dropped(client, two_cooperatives):
     assert response.json()["detail"] == "Ogiltiga förenings-id."
 
 
+@pytest.mark.parametrize("invalid_id", ["-1", "0"])
+def test_id_of_zero_or_below_is_invalid_not_unknown(client, two_cooperatives, invalid_id):
+    # Ids are always positive, so these get the malformed-id answer, not "Föreningen -1 finns inte."
+    response = client.get("/api/comparisons/cooperatives", params={"ids": f"{invalid_id},{two_cooperatives[1]}"})
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Ogiltiga förenings-id."
+
+
+def test_spaces_around_ids_are_accepted(client, two_cooperatives):
+    first, second = two_cooperatives
+    response = client.get("/api/comparisons/cooperatives", params={"ids": f" {first} , {second} "})
+    assert response.status_code == 200
+    assert len(response.json()["cooperatives"]) == 2
+
+
 def test_unknown_cooperative_is_not_found(client, two_cooperatives):
     assert compare(client, two_cooperatives[0], 999).status_code == 404
 
