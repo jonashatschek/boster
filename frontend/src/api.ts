@@ -167,6 +167,8 @@ export interface ComparisonCell {
   level: ConcernLevel | null
   level_label: string | null
   warning: string | null
+  /** Why the value is missing, from the data; null when there is a value. */
+  missing_reason: string | null
 }
 
 export interface HistoryPoint {

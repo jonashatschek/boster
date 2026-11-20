@@ -190,6 +190,7 @@ class ComparisonCell(BaseModel):
     level: str | None  # Concern level, for metrics that have a risk rule.
     level_label: str | None
     warning: str | None = None
+    missing_reason: str | None = None  # Why the value is missing, from the data; None when there is a value.
 
 
 class HistoryPoint(BaseModel):

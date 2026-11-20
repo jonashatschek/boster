@@ -6,13 +6,16 @@ warnings when the compared years or period lengths differ, and notes where the
 reports may define the same figure differently.
 """
 
+from collections.abc import Set as AbstractSet
+
+from app.domain.kpis import CalculatedKpi
 from app.domain.metrics import METRICS, AreaBasis, Unit
 from app.domain.risk import CONCERN_LABELS, RiskRules
 from app.models import HousingCooperative
 from app.schemas import (
     ComparedCooperative, ComparisonCell, ComparisonRow, CooperativeComparison, CooperativeOverview, HistoryPoint,
 )
-from app.services.cooperatives import CORE_METRICS, build_overview
+from app.services.cooperatives import CORE_METRICS, YearCalculations, build_overview, calculations_for_year
 
 MIN_COOPERATIVES = 2
 MAX_COOPERATIVES = 4
@@ -41,7 +44,10 @@ def compare_cooperatives(cooperatives: list[HousingCooperative], rules: RiskRule
     ordered_keys = [key for key in DEFAULT_METRICS if key in present_keys]
     ordered_keys += [key for key in METRICS if key in present_keys and key not in DEFAULT_METRICS]
 
-    rows = [_row(key, overviews, compared, rules) for key in ordered_keys]
+    # Calculations for the compared year, also the unavailable ones, so a missing cell can say what is lacking.
+    calculations = [calculations_for_year(cooperative, c.fiscal_year) if c.fiscal_year else YearCalculations({}, set())
+                    for cooperative, c in zip(cooperatives, compared)]
+    rows = [_row(key, overviews, compared, calculations, rules) for key in ordered_keys]
     return CooperativeComparison(cooperatives=compared, rows=rows, warnings=_warnings(compared))
 
 
@@ -66,12 +72,12 @@ def _period_months(overview: CooperativeOverview, year: int | None) -> int | Non
 
 
 def _row(key: str, overviews: list[CooperativeOverview], compared: list[ComparedCooperative],
-         rules: RiskRules) -> ComparisonRow:
+         calculations: list[YearCalculations], rules: RiskRules) -> ComparisonRow:
     definition = METRICS[key]
     rule = rules.indicators.get(key)
     cells, history = [], {}
 
-    for overview, cooperative in zip(overviews, compared):
+    for overview, cooperative, cooperative_calculations in zip(overviews, compared, calculations):
         series = next((s for s in overview.metrics if s.key == key), None)
         values = series.values if series else []
         history[cooperative.id] = [
@@ -86,11 +92,14 @@ def _row(key: str, overviews: list[CooperativeOverview], compared: list[Compared
             warnings.append(f"Räkenskapsåret omfattar {cooperative.period_months} månader, så årsbelopp blir "
                             f"inte jämförbara med ett vanligt år.")
         warning = " ".join(warnings) or None
+        status = current.display_status if current else "missing"
         cells.append(ComparisonCell(
-            cooperative_id=cooperative.id, fiscal_year=cooperative.fiscal_year, value=value,
-            status=current.display_status if current else "missing",
+            cooperative_id=cooperative.id, fiscal_year=cooperative.fiscal_year, value=value, status=status,
             level=level.value if level else None, level_label=CONCERN_LABELS[level] if level else None,
             warning=warning,
+            missing_reason=(_missing_reason(cooperative.fiscal_year, cooperative_calculations.calculations.get(key),
+                                            cooperative_calculations.conflicting)
+                            if value is None and status == "missing" else None),
         ))
 
     return ComparisonRow(
@@ -99,6 +108,35 @@ def _row(key: str, overviews: list[CooperativeOverview], compared: list[Compared
         is_default=key in DEFAULT_METRICS, cells=cells, history=history,
         note=_AREA_BASIS_NOTES.get(definition.area_basis) if definition.area_basis else None,
     )
+
+
+def _missing_reason(year: int | None, calculation: CalculatedKpi | None,
+                    conflicting: AbstractSet[str] = frozenset()) -> str:
+    """Why a figure is missing for `year`, stated only from what the data shows.
+
+    An input in `conflicting` exists but its sources disagree, so it is named as such, not as missing.
+    """
+    if year is None:
+        return "Inget räkenskapsår att jämföra."
+    not_found = f"Hittades inte i årsredovisningen för {year}"
+    if calculation is not None and calculation.missing_inputs:
+        absent = [_input_label(key) for key in calculation.missing_inputs if key not in conflicting]
+        disputed = [_input_label(key) for key in calculation.missing_inputs if key in conflicting]
+        reason = f"{not_found} och kan inte beräknas."
+        if absent:
+            reason += f" Saknas: {', '.join(absent)}."
+        if disputed:
+            reason += f" Motstridiga uppgifter om {', '.join(disputed)}."
+        return reason
+    if calculation is not None and calculation.note:
+        return f"{not_found}. {calculation.note}"
+    return f"{not_found}."
+
+
+def _input_label(key: str) -> str:
+    """"previous:interest_bearing_debt" → "räntebärande skulder (föregående år)"."""
+    label = METRICS[key.removeprefix("previous:")].label.lower()
+    return f"{label} (föregående år)" if key.startswith("previous:") else label
 
 
 def _warnings(compared: list[ComparedCooperative]) -> list[str]:

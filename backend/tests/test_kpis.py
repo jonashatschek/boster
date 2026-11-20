@@ -4,6 +4,15 @@ from app.domain.kpis import FORMULAS, calculate_all, calculate_kpi, values_agree
 
 FORMULAS_BY_KEY = {formula.metric_key: formula for formula in FORMULAS}
 
+
+def test_every_formula_input_is_a_known_metric():
+    # Missing inputs are shown to the user by their metric label, so each must be registered.
+    from app.domain.kpis import TOTAL_AREA_FORMULA
+    from app.domain.metrics import METRICS
+
+    for formula in (*FORMULAS, TOTAL_AREA_FORMULA):
+        assert set(formula.inputs) | set(formula.previous_year_inputs) <= METRICS.keys(), formula.metric_key
+
 # Brf Friheten Bagarmossen, fiscal year 2024/2025, as printed in its annual report.
 FRIHETEN_2025 = {
     "interest_bearing_debt": 32_000_000,

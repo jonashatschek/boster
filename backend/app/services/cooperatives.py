@@ -6,11 +6,12 @@ and assess the latest year against the configured risk rules.
 """
 
 from collections import defaultdict
+from dataclasses import dataclass
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.domain.kpis import CalculatedKpi, calculate_all, values_agree
+from app.domain.kpis import TOTAL_AREA_FORMULA, CalculatedKpi, calculate_all, calculate_kpi, values_agree
 from app.domain.metrics import METRICS
 from app.domain.provenance import ExtractionMethod, ValueOrigin, VerificationStatus
 from app.domain.resolution import Observation, ResolvedValue, resolve
@@ -75,11 +76,7 @@ def build_overview(cooperative: HousingCooperative, rules: RiskRules) -> Coopera
     resolved = _resolve_all(cooperative.observations)
     observations_by_id = {o.id: o for o in cooperative.observations}
     years = sorted({year for _, year in resolved}, reverse=True)
-
-    figures_by_year: dict[int, dict[str, float]] = defaultdict(dict)
-    for (metric_key, year), result in resolved.items():
-        if result.value is not None:
-            figures_by_year[year][metric_key] = result.value
+    figures_by_year = _figures_by_year(resolved)
 
     calculated: dict[tuple[str, int], CalculatedKpi] = {}
     for year in years:
@@ -104,6 +101,38 @@ def build_overview(cooperative: HousingCooperative, rules: RiskRules) -> Coopera
             for d in cooperative.documents for f in d.findings
         ],
     )
+
+
+@dataclass
+class YearCalculations:
+    """Every KPI calculation for one fiscal year, including unavailable ones with their missing inputs."""
+
+    calculations: dict[str, CalculatedKpi]
+    # Inputs that exist but whose sources disagree, named like `missing_inputs` ("key" or "previous:key").
+    # The calculation lists them as missing because a conflicting value is never used.
+    conflicting: set[str]
+
+
+def calculations_for_year(cooperative: HousingCooperative, year: int) -> YearCalculations:
+    resolved = _resolve_all(cooperative.observations)
+    figures_by_year = _figures_by_year(resolved)
+    current, previous = figures_by_year.get(year, {}), figures_by_year.get(year - 1)
+    calculations = {kpi.metric_key: kpi for kpi in calculate_all(current, previous)}
+    if "total_area" not in calculations and current.get("total_area") is None:
+        calculations["total_area"] = calculate_kpi(TOTAL_AREA_FORMULA, current)  # Unavailable: keep its missing parts.
+    conflicting = {key for (key, resolved_year), result in resolved.items() if result.value is None and resolved_year == year}
+    conflicting |= {f"previous:{key}" for (key, resolved_year), result in resolved.items()
+                    if result.value is None and resolved_year == year - 1}
+    return YearCalculations(calculations, conflicting)
+
+
+def _figures_by_year(resolved: dict[tuple[str, int], ResolvedValue]) -> dict[int, dict[str, float]]:
+    """The agreed values per year; conflicting figures (value None) are left out."""
+    figures_by_year: dict[int, dict[str, float]] = defaultdict(dict)
+    for (metric_key, year), result in resolved.items():
+        if result.value is not None:
+            figures_by_year[year][metric_key] = result.value
+    return figures_by_year
 
 
 def _resolve_all(observations: list[FinancialObservation]) -> dict[tuple[str, int], ResolvedValue]:
