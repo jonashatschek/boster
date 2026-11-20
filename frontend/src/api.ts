@@ -412,8 +412,9 @@ export const api = {
     request<CooperativeOverview>(`/api/observations/${observationId}/verify`, { method: 'POST' }),
   deleteObservation: (observationId: number) =>
     request<CooperativeOverview>(`/api/observations/${observationId}`, { method: 'DELETE' }),
-  compareCooperatives: (ids: number[]) =>
-    request<CooperativeComparison>(`/api/comparisons/cooperatives?ids=${ids.join(',')}`),
+  /** `ids` is passed through as written in the URL, so the backend can report invalid ids. */
+  compareCooperatives: (ids: string) =>
+    request<CooperativeComparison>(`/api/comparisons/cooperatives?ids=${encodeURIComponent(ids)}`),
   /** `ids` is passed through as written in the URL, so the backend can report invalid ids. */
   compareProperties: (ids: string) =>
     request<PropertyComparison>(`/api/comparisons/properties?ids=${encodeURIComponent(ids)}`),

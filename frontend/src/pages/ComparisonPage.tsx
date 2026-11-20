@@ -12,19 +12,30 @@ const AREA_BASIS_LABELS: Record<string, string> = {
 
 export function ComparisonPage() {
   const [searchParams] = useSearchParams()
-  const ids = (searchParams.get('ids') ?? '').split(',').map(Number).filter((id) => Number.isInteger(id) && id > 0)
-  const idKey = ids.join(',')
-  const [comparison, setComparison] = useState<CooperativeComparison | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const idKey = searchParams.get('ids') ?? ''
+  // Each result remembers which selection it belongs to, so a slow earlier answer is never shown for a newer URL.
+  const [result, setResult] = useState<{ key: string; comparison?: CooperativeComparison; error?: string } | null>(
+    null,
+  )
   const [showAll, setShowAll] = useState(false)
 
   useEffect(() => {
-    setError(null)
+    let current = true
     api
-      .compareCooperatives(idKey.split(',').map(Number))
-      .then(setComparison)
-      .catch((caught) => setError(caught instanceof ApiError ? caught.message : 'Kunde inte jämföra föreningarna.'))
+      .compareCooperatives(idKey)
+      .then((comparison) => current && setResult({ key: idKey, comparison }))
+      .catch(
+        (caught) =>
+          current &&
+          setResult({ key: idKey, error: caught instanceof ApiError ? caught.message : 'Kunde inte jämföra föreningarna.' }),
+      )
+    return () => {
+      current = false
+    }
   }, [idKey])
+
+  const comparison = result?.key === idKey ? result.comparison : undefined
+  const error = result?.key === idKey ? result.error : undefined
 
   if (error) {
     return (
