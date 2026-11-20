@@ -288,6 +288,9 @@ def _missing(kind: TransportType, note: str, straight_metres: int | None = None)
                             note=note)
 
 
+NBSP = chr(0xA0)  # Non-breaking space: keeps a number like 1 250 on one line.
+
+
 def _metres(value: int) -> str:
     return f"{value:,} m".replace(",", " ")
 
@@ -298,4 +301,4 @@ def format_walk(metres: int, seconds: int) -> str:
     The one place the walking text is built; the property page and the comparison both show it. Thousands
     are separated by a non-breaking space (U+00A0) so the number never wraps.
     """
-    return f"{metres:,} m".replace(",", " ") + f" (ca {max(1, round(seconds / 60))} min)"
+    return f"{metres:,} m".replace(",", NBSP) + f" (ca {max(1, round(seconds / 60))} min)"
