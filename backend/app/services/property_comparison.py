@@ -290,10 +290,7 @@ def _warnings(apartments: list[_Apartment]) -> list[str]:
                         + ". Skuldsättning per kvm totalyta och per kvm bostadsrättsyta är inte jämförbara, "
                           "så jämför dessa rader med försiktighet.")
     for apartment in apartments:
-        missing_fields = missing_important_fields(apartment.listing)
-        if apartment.overview:  # The linked cooperative makes the listing's cooperative name unnecessary.
-            missing_fields.pop("cooperative_name", None)
-        missing = [label.lower() for label in missing_fields.values()]
+        missing = [label.lower() for label in missing_important_fields(apartment.listing).values()]
         if missing:
             warnings.append(f"{apartment.name} saknar {', '.join(missing)}. Saknade värden visas som ”Saknas”, "
                             f"aldrig som noll.")

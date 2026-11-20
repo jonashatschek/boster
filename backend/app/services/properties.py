@@ -87,7 +87,6 @@ def apply_text(session: Session, listing: Property, text: str) -> None:
     listing.listing_text = text[:200_000]
     listing.retrieval_status = RetrievalStatus.PASTED.value
     listing.retrieved_at = datetime.now(timezone.utc)
-    listing.retrieval_message = _completeness_message(listing)
     _link_by_name(session, listing)
     session.commit()
 
@@ -159,11 +158,19 @@ def _source(status: VerificationStatus, method: str, excerpt: str | None, note: 
 
 
 def missing_important_fields(listing: Property) -> dict[str, str]:
-    """Important facts the listing lacks: field name → label."""
-    return {name: spec.label for name, spec in FIELDS.items() if spec.important and getattr(listing, name) is None}
+    """Important facts the listing lacks: field name → label.
+
+    The listing's cooperative name is not needed once a cooperative is linked.
+    """
+    return {name: spec.label for name, spec in FIELDS.items()
+            if spec.important and getattr(listing, name) is None
+            and not (name == "cooperative_name" and listing.housing_cooperative_id)}
 
 
 def _completeness_message(listing: Property) -> str | None:
+    """Built from the current values each time, so it never goes stale. Only for pasted listings."""
+    if listing.retrieval_status != RetrievalStatus.PASTED.value:
+        return None
     missing = list(missing_important_fields(listing).values())
     if not missing:
         return None
@@ -257,7 +264,7 @@ def build_property_overview(session: Session, listing: Property, rules: RiskRule
 
     return PropertyOverview(
         id=listing.id, title=listing.title, source_url=listing.source_url, source_name=listing.source_name,
-        retrieval_status=listing.retrieval_status, retrieval_message=listing.retrieval_message,
+        retrieval_status=listing.retrieval_status, retrieval_message=_completeness_message(listing),
         retrieved_at=listing.retrieved_at, created_at=listing.created_at, updated_at=listing.updated_at,
         fields=[listing_field(listing, name, spec) for name, spec in FIELDS.items()],
         description=listing_field(listing, "description", FieldSpec("Beskrivning", "longtext")),
