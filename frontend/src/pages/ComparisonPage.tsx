@@ -173,7 +173,10 @@ export function ComparisonPage() {
 function ComparisonValue({ row, cell }: { row: ComparisonRow; cell: ComparisonCell }) {
   if (cell.value === null) {
     return (
-      <span className={cell.status === 'conflicting' ? 'conflicting-text' : 'missing'}>
+      <span
+        className={cell.status === 'conflicting' ? 'conflicting-text' : 'missing'}
+        title={cell.missing_reason ?? undefined}
+      >
         {cell.status === 'conflicting' ? 'Motstridigt' : 'Saknas'}
       </span>
     )

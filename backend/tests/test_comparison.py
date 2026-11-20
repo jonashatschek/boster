@@ -67,6 +67,66 @@ def test_missing_value_is_missing_not_zero(client, two_cooperatives):
     assert not any("saknar" in warning for warning in comparison["warnings"])
 
 
+def test_missing_figure_from_the_report_says_it_was_not_found(client, two_cooperatives):
+    energy = row(compare(client, *two_cooperatives).json(), "energy_cost_per_sqm")
+    first_cell, second_cell = energy["cells"]
+    assert first_cell["missing_reason"] == "Hittades inte i årsredovisningen för 2025."
+    assert second_cell["value"] == 200
+    assert second_cell["missing_reason"] is None
+
+
+def test_missing_calculated_figure_names_its_missing_inputs(client, two_cooperatives):
+    # Without the printed key figure, debt per m² could only be calculated, and the total area is missing.
+    third = add_cooperative(client, name="Brf Utanyta", organisation_number="769600-9012",
+                            key_figures=[("Sparande, kr/kvm", "90", "120")])
+    debt = row(compare(client, two_cooperatives[0], third).json(), "debt_per_sqm_total_area")
+    assert debt["cells"][1]["value"] is None
+    assert debt["cells"][1]["missing_reason"] == (
+        "Hittades inte i årsredovisningen för 2025 och kan inte beräknas. Saknas: totalyta.")
+
+
+def test_conflicting_input_is_not_called_missing(client, two_cooperatives):
+    # Two reports for the same cooperative and year disagree on the debt.
+    statements = [s if s[0] != "Skulder till kreditinstitut" else (s[0], "45 000 000", "41 000 000")
+                  for s in DEFAULT_STATEMENTS]
+    kwargs = dict(name="Brf Oenig", organisation_number="769600-9013", key_figures=[("Sparande, kr/kvm", "90", "120")])
+    conflicted = add_cooperative(client, **kwargs)
+    add_cooperative(client, statements=statements, **kwargs)
+    comparison = compare(client, two_cooperatives[0], conflicted).json()
+    assert row(comparison, "interest_bearing_debt")["cells"][1]["status"] == "conflicting"
+    net_debt = row(comparison, "net_debt")["cells"][1]
+    assert net_debt["missing_reason"] == ("Hittades inte i årsredovisningen för 2025 och kan inte beräknas. "
+                                          "Motstridiga uppgifter om räntebärande skulder.")
+
+
+def test_missing_total_area_names_its_missing_parts(client, two_cooperatives):
+    total_area = row(compare(client, *two_cooperatives).json(), "total_area")
+    assert total_area["cells"][0]["missing_reason"] == (
+        "Hittades inte i årsredovisningen för 2025 och kan inte beräknas. Saknas: bostadsyta, lokalyta.")
+
+
+def test_every_cell_of_an_all_missing_row_has_a_reason(client, two_cooperatives):
+    fee = row(compare(client, *two_cooperatives).json(), "annual_fee_per_sqm")
+    assert all(cell["value"] is None and cell["missing_reason"] for cell in fee["cells"])
+
+
+def test_missing_reason_for_previous_year_inputs_and_zero_denominator():
+    from app.domain.kpis import CalculatedKpi
+    from app.services.comparison import _missing_reason
+
+    previous = CalculatedKpi("average_interest_rate_pct", None, "f", {}, ["previous:interest_bearing_debt"])
+    assert _missing_reason(2025, previous) == ("Hittades inte i årsredovisningen för 2025 och kan inte beräknas. "
+                                               "Saknas: räntebärande skulder (föregående år).")
+    zero = CalculatedKpi("solidity_pct", None, "f", {}, [], note="Kan inte beräknas eftersom nämnaren är noll.")
+    assert _missing_reason(2025, zero) == ("Hittades inte i årsredovisningen för 2025. "
+                                           "Kan inte beräknas eftersom nämnaren är noll.")
+    assert _missing_reason(None, None) == "Inget räkenskapsår att jämföra."
+    both = CalculatedKpi("average_interest_rate_pct", None, "f", {}, ["interest_expense", "previous:interest_bearing_debt"])
+    assert _missing_reason(2025, both, conflicting={"previous:interest_bearing_debt"}) == (
+        "Hittades inte i årsredovisningen för 2025 och kan inte beräknas. Saknas: räntekostnader. "
+        "Motstridiga uppgifter om räntebärande skulder (föregående år).")
+
+
 def test_core_metric_missing_for_every_cooperative_still_has_a_row(client, two_cooperatives):
     from app.services.cooperatives import CORE_METRICS
 
