@@ -37,7 +37,7 @@ export function DataMenu() {
 
   return (
     <div className="row data-menu">
-      <span className="muted small" title="Inget skickas till någon server. Exportera för att spara en kopia eller flytta till en annan dator.">
+      <span className="muted small" title="Dina uppgifter och PDF:er sparas bara här. Bara bostadens adress skickas, till OpenStreetMap och Trafiklab, för att hitta kollektivtrafik. Exportera för att spara en kopia eller flytta till en annan dator.">
         Data sparas bara i den här webbläsaren
       </span>
       <button onClick={exportData} disabled={busy} title="Ladda ner all data som en fil">
