@@ -275,6 +275,7 @@ def _stops(lookup: TransportLookup) -> list[TransportStopOut]:
             result.append(TransportStopOut(
                 type=kind.value, label=label, status=VerificationStatus.EXTRACTED.value, name=stop.name,
                 walking_metres=stop.walking_metres, walking_seconds=stop.walking_seconds,
+                walk_text=format_walk(stop.walking_metres, stop.walking_seconds),
                 straight_metres=stop.straight_metres, note=None,
             ))
     return result
@@ -282,7 +283,8 @@ def _stops(lookup: TransportLookup) -> list[TransportStopOut]:
 
 def _missing(kind: TransportType, note: str, straight_metres: int | None = None) -> TransportStopOut:
     return TransportStopOut(type=kind.value, label=TRANSPORT_LABELS[kind], status=VerificationStatus.MISSING.value,
-                            name=None, walking_metres=None, walking_seconds=None, straight_metres=straight_metres,
+                            name=None, walking_metres=None, walking_seconds=None, walk_text=None,
+                            straight_metres=straight_metres,
                             note=note)
 
 
@@ -291,5 +293,9 @@ def _metres(value: int) -> str:
 
 
 def format_walk(metres: int, seconds: int) -> str:
-    """"163 m (ca 2 min)": the routing service's distance and time, rounded to whole minutes (at least 1)."""
-    return f"{_metres(metres)} (ca {max(1, round(seconds / 60))} min)"
+    """"163 m (ca 2 min)": the routing service's distance and time, rounded to whole minutes (at least 1).
+
+    The one place the walking text is built; the property page and the comparison both show it. Thousands
+    are separated by a non-breaking space (U+00A0) so the number never wraps.
+    """
+    return f"{metres:,} m".replace(",", " ") + f" (ca {max(1, round(seconds / 60))} min)"

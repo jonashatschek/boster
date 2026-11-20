@@ -285,6 +285,7 @@ export interface TransportStop {
   name: string | null
   walking_metres: number | null
   walking_seconds: number | null
+  walk_text: string | null // "163 m (ca 2 min)", formatted by the backend; null without a walking distance.
   straight_metres: number | null
   note: string | null
 }

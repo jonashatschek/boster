@@ -15,7 +15,7 @@ export function TransportSection({ transport, lookup }: Props) {
   const { busy, error, hasKey: key } = lookup
 
   // Types without a stop within walking distance are left out of the list.
-  const found = transport.stops.filter((stop) => stop.walking_metres !== null && stop.walking_seconds !== null)
+  const found = transport.stops.filter((stop) => stop.walk_text !== null)
 
   return (
     <section className="card stack">
@@ -104,8 +104,7 @@ function StopRow({ stop }: { stop: TransportStop }) {
       <div className="spread">
         <span className="small muted">{stop.label}</span>
         <span>
-          <strong>{stop.name}</strong> {formatMetres(stop.walking_metres!)} (ca{' '}
-          {Math.max(1, Math.round(stop.walking_seconds! / 60))} min) till fots
+          <strong>{stop.name}</strong> {stop.walk_text} till fots
         </span>
       </div>
       <div>
@@ -113,8 +112,4 @@ function StopRow({ stop }: { stop: TransportStop }) {
       </div>
     </li>
   )
-}
-
-function formatMetres(metres: number): string {
-  return `${new Intl.NumberFormat('sv-SE').format(metres)} m`
 }

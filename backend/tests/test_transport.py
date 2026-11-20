@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from app.services.transport import format_walk
 from app.transport.nearby import (
     MAX_WALKING_METRES, GeocodeQuery, Place, Stop, TransportLookupError, TransportType, geocode_query,
     nearest_per_type, parse_nearby_stops, parse_walking, walking_request,
@@ -189,3 +190,17 @@ def test_recorded_resrobot_response():
     assert nearest[TransportType.BUS] == nearest[TransportType.SUBWAY]
     assert nearest[TransportType.COMMUTER_TRAIN].name == "Stockholm södra station"
     assert nearest[TransportType.COMMUTER_TRAIN].straight_metres == 872
+
+
+# --- Walking text ------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("metres, seconds, text", [
+    (163, 125, "163 m (ca 2 min)"),
+    (163, 20, "163 m (ca 1 min)"),  # Whole minutes, but never below 1.
+    (500, 89, "500 m (ca 1 min)"),
+    (500, 91, "500 m (ca 2 min)"),
+    (1250, 900, "1 250 m (ca 15 min)"),  # The thousands separator is a non-breaking space.
+])
+def test_walking_text(metres, seconds, text):
+    assert format_walk(metres, seconds) == text

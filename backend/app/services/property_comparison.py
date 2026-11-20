@@ -18,7 +18,7 @@ from app.schemas import (
 )
 from app.services.cooperatives import build_overview, load_cooperative
 from app.services.properties import FIELDS, derived_values, listing_field, missing_important_fields
-from app.services.transport import format_walk, transport_info
+from app.services.transport import transport_info
 from app.transport.nearby import TRANSPORT_LABELS, TransportType
 
 MIN_PROPERTIES = 2
@@ -167,11 +167,11 @@ def _transport_rows(apartments: list[_Apartment]) -> list[PropertyComparisonRow]
                 cells.append(PropertyComparisonCell(property_id=property_id, value=None, status=MISSING, note=note))
                 continue
             stop = next(s for s in info.stops if s.type == kind.value)
-            if stop.walking_metres is None:
+            if stop.walk_text is None:
                 cells.append(PropertyComparisonCell(property_id=property_id, value=None, status=MISSING,
                                                     note=stop.note))
                 continue
-            value = f"{stop.name}, {format_walk(stop.walking_metres, stop.walking_seconds)} till fots"
+            value = f"{stop.name}, {stop.walk_text} till fots"
             excerpt = (f"{info.source} Hämtad {info.retrieved_at:%Y-%m-%d} för ”{info.looked_up_query}”. "
                        f"Närmaste hållplats fågelvägen; gångvägen är beräknad dit.")
             cells.append(PropertyComparisonCell(property_id=property_id, value=value, status=stop.status,
