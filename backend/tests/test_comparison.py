@@ -63,7 +63,20 @@ def test_missing_value_is_missing_not_zero(client, two_cooperatives):
     assert first_cell["value"] is None
     assert first_cell["status"] == "missing"
     assert second_cell["value"] == 200
-    assert any("Saknas" in warning and "Brf Provhuset" in warning for warning in comparison["warnings"])
+    # The table shows "Saknas" for each missing value, so there is no separate banner about it.
+    assert not any("saknar" in warning for warning in comparison["warnings"])
+
+
+def test_core_metric_missing_for_every_cooperative_still_has_a_row(client, two_cooperatives):
+    from app.services.cooperatives import CORE_METRICS
+
+    comparison = compare(client, *two_cooperatives).json()
+    rows = {r["key"]: r for r in comparison["rows"]}
+    assert set(CORE_METRICS) <= rows.keys()
+    missing_everywhere = [key for key in CORE_METRICS if all(c["value"] is None for c in rows[key]["cells"])]
+    assert missing_everywhere, "the fixture should lack at least one core metric in both reports"
+    for key in missing_everywhere:
+        assert [c["status"] for c in rows[key]["cells"]] == ["missing", "missing"]
 
 
 def test_rows_keep_their_denominator(client, two_cooperatives):
