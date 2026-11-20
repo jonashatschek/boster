@@ -36,7 +36,8 @@ def compare_cooperatives(cooperatives: list[HousingCooperative], rules: RiskRule
     overviews = [build_overview(cooperative, rules) for cooperative in cooperatives]
     compared = [_compared_cooperative(overview) for overview in overviews]
 
-    present_keys = {series.key for overview in overviews for series in overview.metrics}
+    # Core figures always get a row, so one that no cooperative reports shows as "Saknas" instead of vanishing.
+    present_keys = {series.key for overview in overviews for series in overview.metrics} | set(CORE_METRICS)
     ordered_keys = [key for key in DEFAULT_METRICS if key in present_keys]
     ordered_keys += [key for key in METRICS if key in present_keys and key not in DEFAULT_METRICS]
 
@@ -114,9 +115,5 @@ def _warnings(compared: list[ComparedCooperative]) -> list[str]:
                 f"Nyckeltal per kvm och procent går att jämföra, men årsbelopp (t.ex. intäkter och "
                 f"räntekostnader) gör det inte."
             )
-    for cooperative in compared:
-        missing = cooperative.completeness_total - cooperative.completeness_available
-        if missing:
-            warnings.append(f"{cooperative.name} saknar {missing} av {cooperative.completeness_total} viktiga "
-                            f"uppgifter. Saknade värden visas som ”Saknas”, aldrig som noll.")
+    # Missing values are not warned about here: the table shows each one as "Saknas".
     return warnings
