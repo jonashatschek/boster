@@ -126,6 +126,46 @@ def test_manual_link_and_unlink(client):
     assert overview["cooperative"] is None
 
 
+COOPERATIVE_NAME_LABEL = "Förening enligt annonsen"
+
+
+def reported_missing(overview):
+    """Everything the overview reports as missing: the list and the warning shown on the page."""
+    return " ".join(overview["missing"]) + " " + (overview["retrieval_message"] or "").lower()
+
+
+def test_cooperative_name_is_reported_missing_when_no_cooperative_is_linked(client):
+    text = HEMNET_STYLE.replace("Förening\nBRF Segelflygaren\n", "")
+    overview = client.post("/api/properties/from-text", json={"text": text}).json()
+    assert COOPERATIVE_NAME_LABEL in overview["missing"]
+    assert COOPERATIVE_NAME_LABEL.lower() in overview["retrieval_message"]
+
+
+def test_cooperative_name_is_not_missing_once_a_cooperative_is_linked_manually(client):
+    cooperative_id = add_cooperative(client)
+    text = HEMNET_STYLE.replace("Förening\nBRF Segelflygaren\n", "")
+    overview = client.post("/api/properties/from-text", json={"text": text}).json()
+    overview = client.put(f"/api/properties/{overview['id']}/cooperative", json={"cooperative_id": cooperative_id}).json()
+    assert COOPERATIVE_NAME_LABEL.lower() not in reported_missing(overview).lower()
+
+
+def test_cooperative_name_is_not_missing_after_clearing_it_on_a_linked_property(client):
+    add_cooperative(client, name="HSB Brf Segelflygaren i Stockholm", organisation_number="716416-7939")
+    overview = client.post("/api/properties/from-text", json={"text": HEMNET_STYLE}).json()
+    assert overview["cooperative"] is not None
+    overview = client.patch(f"/api/properties/{overview['id']}", json={"cooperative_name": None}).json()
+    assert overview["cooperative"] is not None
+    assert COOPERATIVE_NAME_LABEL.lower() not in reported_missing(overview).lower()
+
+
+def test_warning_follows_values_filled_in_by_hand(client):
+    text = BOOLI_STYLE.replace("Utgångspris 3 950 000 kr\n", "")
+    overview = client.post("/api/properties/from-text", json={"text": text}).json()
+    assert "utgångspris" in overview["retrieval_message"]
+    overview = client.patch(f"/api/properties/{overview['id']}", json={"asking_price": 3_950_000}).json()
+    assert "utgångspris" not in (overview["retrieval_message"] or "")
+
+
 def test_deleting_cooperative_keeps_property(client):
     cooperative_id = add_cooperative(client, name="Brf Segelflygaren", organisation_number="716416-7939")
     overview = client.post("/api/properties/from-text", json={"text": HEMNET_STYLE}).json()
