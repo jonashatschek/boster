@@ -18,11 +18,13 @@ RulesDep = Annotated[RiskRules, Depends(get_risk_rules)]
 
 
 def _parse_ids(ids: str, minimum: int, maximum: int, invalid: str, plural: str) -> list[int]:
-    """Comma-separated ids, duplicates removed, between `minimum` and `maximum` of them."""
+    """Comma-separated positive ids, duplicates removed, between `minimum` and `maximum` of them."""
     try:
         parsed = list(dict.fromkeys(int(part) for part in ids.split(",") if part.strip()))
     except ValueError as error:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, invalid) from error
+    if any(parsed_id <= 0 for parsed_id in parsed):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, invalid)
     if not minimum <= len(parsed) <= maximum:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
                             f"Välj mellan {minimum} och {maximum} {plural} att jämföra.")

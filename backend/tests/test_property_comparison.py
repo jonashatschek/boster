@@ -221,3 +221,12 @@ def test_rejects_invalid_too_few_too_many_and_unknown_ids(client, two_properties
     assert compare(client, linked, unlinked, *extra).status_code == 422
     unknown = compare(client, linked, 999)
     assert unknown.status_code == 404 and "999" in unknown.json()["detail"]
+
+
+@pytest.mark.parametrize("invalid_id", ["-1", "0"])
+def test_id_of_zero_or_below_is_invalid_not_unknown(client, two_properties, invalid_id):
+    # Ids are always positive, so these get the malformed-id answer, not "Bostaden 0 finns inte."
+    _, unlinked, _ = two_properties
+    response = compare(client, invalid_id, unlinked)
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Ogiltiga bostads-id."
