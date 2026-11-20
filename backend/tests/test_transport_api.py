@@ -109,6 +109,7 @@ def test_nearest_stops_with_walking_distance_time_and_source(client):
     assert subway["walking_seconds"] == 125
     assert subway["straight_metres"] == 99
     assert subway["status"] == "extracted"
+    assert subway["walk_text"] == "163 m (ca 2 min)"
 
     train = stop_of(transport, "commuter_train")
     assert train["label"] == "Pendeltåg/lokaltåg"
@@ -161,7 +162,7 @@ def test_type_without_a_stop_within_two_km(client):
 
     train = stop_of(transport, "commuter_train")
     assert train["status"] == "missing"
-    assert train["name"] is None and train["walking_metres"] is None
+    assert train["name"] is None and train["walking_metres"] is None and train["walk_text"] is None
     assert train["note"] == "Saknas inom 2 km gångavstånd."
 
 
@@ -175,7 +176,7 @@ def test_stop_more_than_two_km_away_on_foot_is_not_shown(client):
     step(client, property_id, "stops", fixture("resrobot_nearbystops.json"))
     train = stop_of(step(client, property_id, "walking", matrix)["transport"], "commuter_train")
     assert train["status"] == "missing"
-    assert train["walking_metres"] is None
+    assert train["walking_metres"] is None and train["walk_text"] is None
     assert "Stockholm Södra station" in train["note"] and "2 150 m" in train["note"]
 
 
@@ -190,6 +191,23 @@ def test_stop_without_a_walking_route(client):
     train = stop_of(step(client, property_id, "walking", matrix)["transport"], "commuter_train")
     assert train["status"] == "missing"
     assert "gångväg" in train["note"]
+    assert train["walk_text"] is None
+
+
+def test_walk_over_a_thousand_metres_uses_a_non_breaking_space(client):
+    matrix = fixture("valhalla_matrix.json")
+    matrix["sources_to_targets"][0][1]["distance"] = 1.250
+    matrix["sources_to_targets"][0][1]["time"] = 900
+    first, second = add_listing(client), add_listing(client)
+    step(client, first, "start")
+    step(client, first, "geocode", fixture("nominatim_house.json"))
+    step(client, first, "stops", fixture("resrobot_nearbystops.json"))
+    train = stop_of(step(client, first, "walking", matrix)["transport"], "commuter_train")
+    assert train["walk_text"] == "1 250 m (ca 15 min)"
+
+    comparison = client.get(f"/api/comparisons/properties?ids={first},{second}").json()
+    cell = next(r for r in comparison["rows"] if r["key"] == "transport:commuter_train")["cells"][0]
+    assert cell["value"] == "Stockholm Södra station (Stockholm kn), 1 250 m (ca 15 min) till fots"
 
 
 def test_address_not_found_fails_with_a_reason(client):

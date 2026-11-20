@@ -263,6 +263,7 @@ class TransportStopOut(BaseModel):
     name: str | None
     walking_metres: int | None  # From the routing service, never estimated.
     walking_seconds: int | None
+    walk_text: str | None  # "163 m (ca 2 min)", built by format_walk; None without a walking distance.
     straight_metres: int | None  # Trafiklab's distance, shown for context.
     note: str | None
 
