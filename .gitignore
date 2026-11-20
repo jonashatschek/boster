@@ -26,3 +26,6 @@ sample_documents/
 .claude/hooks/.last-pass
 .claude/settings.local.json
 CLAUDE.local.md
+
+# Git worktrees created for parallel Claude Code agents
+.claude/worktrees/
