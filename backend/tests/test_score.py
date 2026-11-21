@@ -196,3 +196,112 @@ def test_shipped_configuration_has_a_land_tenure_part():
     land = load_risk_rules(CONFIG_PATH).score.land_tenure
     assert (land.weight, land.owned, land.leasehold) == (10, 100, 0)
     assert land.reason
+
+
+# Trends over time (#45): the change per year over the 3 latest years, all 3 needed. Debt per m² in % per year,
+# savings per m² in kr/m² per year (savings can be negative, so a percentage would mean nothing).
+def test_trend_change_in_percent_per_year():
+    from app.domain.score import TrendRule
+
+    debt = TrendRule("debt_per_sqm_total_area", "percent_per_year", best=-5, worst=5, years=3, weight=10, reason="")
+    # Toppsockret: 956 → 1 443 over 2 years: (1443 - 956) / 956 / 2 = +25.47 % per year.
+    assert debt.change([956, 948, 1_443]) == pytest.approx(25.47, abs=0.01)
+    assert debt.change([3_307, 2_501, 1_747]) == pytest.approx(-23.59, abs=0.01)  # Byamännen 2: falling.
+
+
+def test_trend_change_in_absolute_units_per_year_handles_a_negative_start():
+    from app.domain.score import TrendRule
+
+    savings = TrendRule("savings_per_sqm", "change_per_year", best=20, worst=-20, years=3, weight=10, reason="")
+    assert savings.change([-300, 160, 122]) == pytest.approx(211)  # Byamännen 2: (122 - (-300)) / 2.
+    assert savings.change([257, 215, 201]) == pytest.approx(-28)  # Friheten.
+
+
+@pytest.mark.parametrize(("change", "expected"), [
+    (-23.6, 100), (-5, 100),  # As good as the best limit or better.
+    (-1.6, pytest.approx(66)), (0, 50),  # Linear in between.
+    (5, 0), (25.5, 0),  # As bad as the worst limit or worse.
+])
+def test_trend_part_score_for_debt_where_falling_is_better(change, expected):
+    from app.domain.score import TrendRule
+
+    debt = TrendRule("debt_per_sqm_total_area", "percent_per_year", best=-5, worst=5, years=3, weight=10, reason="")
+    assert debt.part_score(change) == expected
+
+
+@pytest.mark.parametrize(("change", "expected"), [(211, 100), (20, 100), (0, 50), (-18, pytest.approx(5)), (-28, 0)])
+def test_trend_part_score_for_savings_where_rising_is_better(change, expected):
+    from app.domain.score import TrendRule
+
+    savings = TrendRule("savings_per_sqm", "change_per_year", best=20, worst=-20, years=3, weight=10, reason="")
+    assert savings.part_score(change) == expected
+
+
+def rules_with_trends(weights, **kwargs):
+    from app.domain.score import TrendRule
+
+    base = rules(weights, **kwargs)
+    trends = {"trend:debt_per_sqm_total_area": TrendRule("debt_per_sqm_total_area", "percent_per_year", -5, 5, 3, 10, "")}
+    return RiskRules(base.indicators, ScoreRules(base.score.weights, base.score.min_key_figures,
+                                                 base.score.min_weight_share, None, trends))
+
+
+def test_trend_is_a_part_that_counts_in_the_weight_but_not_as_a_key_figure():
+    # Key figures as before (67 over weight 100) plus a debt trend of 0 %/year → 50 points, weight 10:
+    # (3200 + 1500 + 2000 + 0 + 500) / 110 = 7200 / 110 = 65.45 → 65.
+    result = compute_score(KEY_FIGURES, rules_with_trends(WEIGHTS), trends={"trend:debt_per_sqm_total_area": 0})
+    assert result.score == 65
+    trend = next(p for p in result.parts if p.metric_key == "trend:debt_per_sqm_total_area")
+    assert (trend.value, trend.part_score, trend.weight) == (0, 50, 10)
+
+    missing = compute_score(KEY_FIGURES, rules_with_trends(WEIGHTS), trends={"trend:debt_per_sqm_total_area": None})
+    assert missing.score == 67 and missing.missing == ["trend:debt_per_sqm_total_area"]
+
+    two_figures = compute_score({"debt_per_sqm_total_area": 6_000, "savings_per_sqm": 150}, rules_with_trends(WEIGHTS),
+                                trends={"trend:debt_per_sqm_total_area": 0})
+    assert two_figures.score is None  # A trend never stands in for a key figure.
+
+
+def test_shipped_configuration_has_two_trends():
+    trends = load_risk_rules(CONFIG_PATH).score.trends
+    assert set(trends) == {"trend:debt_per_sqm_total_area", "trend:savings_per_sqm"}
+    debt, savings = trends["trend:debt_per_sqm_total_area"], trends["trend:savings_per_sqm"]
+    assert (debt.measure, debt.best, debt.worst, debt.years, debt.weight) == ("percent_per_year", -5, 5, 3, 10)
+    assert (savings.measure, savings.best, savings.worst, savings.years, savings.weight) == (
+        "change_per_year", 20, -20, 3, 10)
+    assert debt.reason and savings.reason
+
+
+def test_minimum_coverage_counts_only_key_figures_and_land_not_trends():
+    # Key figures 40 + 30 + 20 of 100 and owned land 10, trends (weight 10 each in this setup: one) missing.
+    # Over all weight: 100 of 110 + 10 = 120 → but the minimum looks only at key figures and land: 100 of 110.
+    from app.domain.score import LandTenureRule, TrendRule
+
+    base = rules(WEIGHTS)
+    trends = {f"trend:{key}": TrendRule(key, "change_per_year", 20, -20, 3, 60, "")
+              for key in ("savings_per_sqm",)}
+    score_rules = ScoreRules(base.score.weights, 3, 0.5, LandTenureRule(10, "", 100, 0), trends)
+    result = compute_score({"debt_per_sqm_total_area": 6_000, "savings_per_sqm": 150, "interest_sensitivity_pct": 3},
+                           RiskRules(base.indicators, score_rules), land_tenure="owned", trends={})
+    # Present: 40 + 30 + 20 + 10 = 100 of all 170 (59 %), and of the 110 key-figure-and-land weight (91 %).
+    assert result.weight_share == pytest.approx(100 / 170)
+    assert result.score is not None
+    # With a heavy missing trend the overall share drops below 50 %, but the score stays: history is a bonus.
+    heavy = ScoreRules(base.score.weights, 3, 0.5, LandTenureRule(10, "", 100, 0),
+                       {"trend:savings_per_sqm": TrendRule("savings_per_sqm", "change_per_year", 20, -20, 3, 200, "")})
+    result = compute_score({"debt_per_sqm_total_area": 6_000, "savings_per_sqm": 150, "interest_sensitivity_pct": 3},
+                           RiskRules(base.indicators, heavy), land_tenure="owned", trends={})
+    assert result.weight_share == pytest.approx(100 / 310)
+    assert result.score is not None
+
+
+def test_core_weight_share_is_the_share_the_minimum_uses():
+    from app.domain.score import LandTenureRule, TrendRule
+
+    base = rules(WEIGHTS)
+    score_rules = ScoreRules(base.score.weights, 3, 0.5, LandTenureRule(10, "", 100, 0),
+                             {"trend:savings_per_sqm": TrendRule("savings_per_sqm", "change_per_year", 20, -20, 3, 20, "")})
+    result = compute_score({"debt_per_sqm_total_area": 6_000, "savings_per_sqm": 150, "interest_sensitivity_pct": 3},
+                           RiskRules(base.indicators, score_rules), land_tenure="owned", trends={})
+    assert result.core_weight_share == pytest.approx(100 / 110)  # Key figures 90 + land 10 of 100 + 10.
+    assert result.weight_share == pytest.approx(100 / 130)  # All weight, including the missing trend.

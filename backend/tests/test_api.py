@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.report_factory import make_report_pdf
+from tests.report_factory import DEFAULT_STATEMENTS, make_report_pdf
 from tests.uploads import upload_pdf
 
 SAMPLES = Path(__file__).parents[2] / "sample_documents"
@@ -230,14 +230,16 @@ def test_startup_adds_columns_missing_from_an_older_database(tmp_path):
 def test_overview_has_score_with_its_explanation(client):
     # Default report: debt 4 000 kr/m² (part 100, weight 25), savings 90 kr/m² (0, 20), interest
     # sensitivity 12 % (0, 20), short-term debt 0 % (100, 10), land tenure "tomträtt" (0, 10); fee share and
-    # interest coverage missing. (100·25 + 0·20 + 0·20 + 100·10 + 0·10) / 85 = 41.2 → 41, with 85/110 of the weight.
+    # interest coverage missing, and both trends missing (one report: 2 years). (100·25 + 0·20 + 0·20 + 100·10 +
+    # 0·10) / 85 = 41.2 → 41, with 85/130 of the weight.
     cooperative_id = upload(client, make_report_pdf()).json()["cooperative_id"]
     score = client.get(f"/api/cooperatives/{cooperative_id}").json()["score"]
     assert score["score"] == 41
-    assert score["weight_share"] == pytest.approx(85 / 110)
+    assert score["weight_share"] == pytest.approx(85 / 130)
     assert score["key_figures_assessed"] == 4
     assert score["key_figures_total"] == 6
-    assert score["coverage"] == "Baserat på 4 av 6 nyckeltal och marken (77 % av vikten)."
+    # The percentage is the one the minimum uses: key figures and land, 85 of 110.
+    assert score["coverage"] == "Baserat på 4 av 6 nyckeltal och marken (77 % av vikten) och 0 av 2 trender."
     parts = {p["key"]: p for p in score["parts"]}
     assert parts["debt_per_sqm_total_area"]["part_score"] == 100
     assert parts["debt_per_sqm_total_area"]["value"] == 4_000
@@ -255,6 +257,8 @@ def test_overview_has_score_with_its_explanation(client):
     assert {m["key"]: m["reason"] for m in score["missing"]} == {
         "fee_share_of_revenue_pct": "Saknas för räkenskapsår 2025.",
         "interest_coverage_ratio": "Saknas för räkenskapsår 2025.",
+        "trend:debt_per_sqm_total_area": "Saknas för räkenskapsår 2023.",  # One report: only 2024 and 2025.
+        "trend:savings_per_sqm": "Saknas för räkenskapsår 2023.",
     }
     assert score["rule"]
 
@@ -273,18 +277,22 @@ def test_conflicting_key_figure_is_a_missing_part_of_the_score(client):
 
 # Expected scores worked out by hand from the printed key figures, the rules and the weights in
 # config/risk_rules.toml (weights: debt 25, sensitivity 20, savings 20, coverage 15, fee share 10, short-term 10,
-# land tenure 10: owned 100, leasehold 0).
+# land tenure 10: owned 100, leasehold 0; trends over the 3 latest years, weight 10 each: debt per m² −5 %/year
+# → 100, +5 %/year → 0; savings per m² +20 kr/m² per year → 100, −20 → 0).
 SAMPLE_SCORES = {
     # Debt 1 443 → 100; sensitivity 2 % → 100; savings 151 → (151-100)/(200-100) = 51; interest coverage
-    # 1.52 → (1.52-1.2)/(2-1.2) ≈ 40; short-term debt 100 % → 0; fee share and land tenure missing
-    # (weight 90 of 110). (2500 + 2000 + 1020 + 603 + 0) / 90 = 68.0 → 68.
-    "702002-3532_arsredovisning.pdf": 68,
-    # Savings 122 → 22, the other key figures 100, tomträtt 0: (2500 + 2000 + 440 + 1500 + 1000 + 1000 + 0) / 110
-    # = 76.7 → 77.
-    "byamannen2_arsredovisning_2025.pdf": 77,
-    # Short-term debt 33.3 % → (60-33.3)/(60-30) ≈ 89, the other key figures 100, tomträtt 0:
-    # (9000 + 891 + 0) / 110 = 89.9 → 90.
-    "segelflygaren_arsredovisning.pdf": 90,
+    # 1.52 → (1.52-1.2)/(2-1.2) ≈ 40; short-term debt 100 % → 0; fee share and land tenure missing.
+    # Debt trend 956 → 948 → 1 443: (1443-956)/956/2 = +25.5 %/year → 0; savings trend 200 → 172 → 151:
+    # (151-200)/2 = -24.5 per year → 0. (2500 + 2000 + 1020 + 603 + 0 + 0 + 0) / 110 = 55.7 → 56.
+    "702002-3532_arsredovisning.pdf": 56,
+    # Savings 122 → 22, the other key figures 100, tomträtt 0. Debt trend 3 307 → 2 501 → 1 747: -23.6 %/year
+    # → 100; savings trend -300 → 160 → 122: +211 per year → 100.
+    # (2500 + 2000 + 440 + 1500 + 1000 + 1000 + 0 + 1000 + 1000) / 130 = 80.3 → 80.
+    "byamannen2_arsredovisning_2025.pdf": 80,
+    # Short-term debt 33.3 % → (60-33.3)/(60-30) ≈ 89, the other key figures 100, tomträtt 0. Debt trend
+    # 3 889 → 3 855 → 3 824: -0.84 %/year → (5+0.84)/10 = 58; savings trend 234 → 266 → 277: +21.5 per year → 100.
+    # (9000 + 891 + 0 + 584 + 1000) / 130 = 88.3 → 88.
+    "segelflygaren_arsredovisning.pdf": 88,
 }
 
 
@@ -300,8 +308,8 @@ def test_score_of_real_reports(client, filename, expected):
 def test_value_that_disagrees_with_our_calculation_is_a_missing_part(client):
     # A manual total area of 5 000 m² gives a calculated debt per m² of 8 000, which disagrees with the
     # printed 4 000: the value stays visible but is "conflicting", so the score leaves it out.
-    # Remaining: savings 0 (20), sensitivity 0 (20), short-term debt 100 (10), tomträtt 0 (10): 1000 / 60 = 16.7 → 17,
-    # at 60/110 of the weight.
+    # Remaining: savings 0 (20), sensitivity 0 (20), short-term debt 100 (10), tomträtt 0 (10): 60 of the 110 weight
+    # of key figures and land (55 %, the minimum ignores trends), so a score: 1000 / 60 = 16.7 → 17.
     cooperative_id = upload(client, make_report_pdf()).json()["cooperative_id"]
     client.post(f"/api/cooperatives/{cooperative_id}/observations",
                 json={"metric_key": "total_area", "fiscal_year": 2025, "value": 5_000})
@@ -355,4 +363,101 @@ def test_unknown_land_tenure_is_a_missing_part_of_the_score(client):
     assert {m["key"]: m["reason"] for m in score["missing"]}["land_tenure"] == (
         "Okänt om föreningen äger marken eller har tomträtt.")
     assert score["score"] == 47  # As without land tenure: (2500 + 1000) / 75.
-    assert score["coverage"] == "Baserat på 4 av 6 nyckeltal (68 % av vikten)."
+    assert score["coverage"] == "Baserat på 4 av 6 nyckeltal (68 % av vikten) och 0 av 2 trender."  # 75 of 110.
+
+
+def _three_years(client, printed_debt=True):
+    """A cooperative with key figures for 2023–2025: a 2025 report (2025, 2024) and a 2024 report (2024, 2023).
+
+    The 2024 report's statements repeat the 2025 report's comparison column, so the shared year agrees. Without
+    `printed_debt`, neither report prints a debt per m² key figure.
+    """
+    debt = [("Skuldsättning, kr/kvm", "4 000", "4 200")] if printed_debt else []
+    rest_2025 = [("Sparande, kr/kvm", "90", "120"), ("Räntekänslighet, %", "12", "11")]
+    cooperative_id = upload(client, make_report_pdf(key_figures=debt + rest_2025)).json()["cooperative_id"]
+    statements = [(label, previous, previous) for label, _, previous in DEFAULT_STATEMENTS]
+    debt = [("Skuldsättning, kr/kvm", "4 200", "4 500")] if printed_debt else []
+    upload(client, make_report_pdf(period=("2024-01-01", "2024-12-31"), previous_period_end="2023-12-31",
+                                   statements=statements,
+                                   key_figures=debt + [("Sparande, kr/kvm", "120", "150"),
+                                                       ("Räntekänslighet, %", "11", "10")]), "2024.pdf")
+    return cooperative_id
+
+
+def _part(score, key):
+    return next((p for p in score["parts"] if p["key"] == key), None)
+
+
+def test_trends_over_three_years_are_parts_of_the_score(client):
+    # Debt per m² 4 500 → 4 200 → 4 000: (4000 - 4500) / 4500 / 2 = -5.56 %/year → 100 points (weight 10).
+    # Savings 150 → 120 → 90: (90 - 150) / 2 = -30 kr/m² per year → 0 points (weight 10).
+    # With the 2025 key figures (debt 100·25, savings 0·20, sensitivity 0·20, short-term 100·10) and tomträtt (0·10):
+    # (2500 + 1000 + 1000 + 0) / 105 = 42.9 → 43.
+    cooperative_id = _three_years(client)
+    score = client.get(f"/api/cooperatives/{cooperative_id}").json()["score"]
+    debt = _part(score, "trend:debt_per_sqm_total_area")
+    assert debt["label"] == "Skuldsättning per kvm totalyta, förändring"
+    assert debt["value"] == pytest.approx(-5.56, abs=0.01) and debt["unit"] == "% per år"
+    assert debt["part_score"] == 100 and debt["weight"] == 10 and debt["fiscal_year"] == 2025
+    assert [(i["fiscal_year"], i["value"]) for i in debt["inputs"]] == [(2023, 4_500), (2024, 4_200), (2025, 4_000)]
+    assert {s["page"] for i in debt["inputs"] for s in i["sources"]} == {2}  # Each year's printed key figure.
+    assert debt["rule"].startswith("Förändring per år över de 3 senaste åren: 100 poäng vid −5 % per år")
+    savings = _part(score, "trend:savings_per_sqm")
+    assert savings["value"] == pytest.approx(-30) and savings["unit"] == "kr/m² per år" and savings["part_score"] == 0
+    assert score["score"] == 43
+
+
+def test_trend_with_a_missing_year_is_a_missing_part(client):
+    # Only 2024 and 2025: the 3rd year is missing, never interpolated.
+    cooperative_id = upload(client, make_report_pdf()).json()["cooperative_id"]
+    score = client.get(f"/api/cooperatives/{cooperative_id}").json()["score"]
+    reasons = {m["key"]: m["reason"] for m in score["missing"]}
+    assert reasons["trend:debt_per_sqm_total_area"] == "Saknas för räkenskapsår 2023."
+    assert reasons["trend:savings_per_sqm"] == "Saknas för räkenskapsår 2023."
+    assert score["score"] == 41  # Unchanged: missing trends count neither as good nor as bad.
+
+
+def test_trend_with_a_conflicting_year_is_a_missing_part(client):
+    # Figures for an earlier year (a report's comparison column) are not a conflict: the latest added report wins. A
+    # conflict is two reports disagreeing on their own year, here 2025, so the debt trend is left out.
+    cooperative_id = _three_years(client)
+    upload(client, make_report_pdf(key_figures=[("Skuldsättning, kr/kvm", "4 600", "4 200"),
+                                                ("Sparande, kr/kvm", "90", "120"),
+                                                ("Räntekänslighet, %", "12", "11")]), "annan-2025.pdf")
+    score = client.get(f"/api/cooperatives/{cooperative_id}").json()["score"]
+    assert {m["key"]: m["reason"] for m in score["missing"]}["trend:debt_per_sqm_total_area"] == (
+        "Motstridiga uppgifter för räkenskapsår 2025.")
+    assert _part(score, "trend:savings_per_sqm") is not None  # The savings agree, so that trend stays.
+
+
+def test_each_trend_year_carries_its_own_source(client):
+    cooperative_id = _three_years(client)
+    debt = _part(client.get(f"/api/cooperatives/{cooperative_id}").json()["score"], "trend:debt_per_sqm_total_area")
+    assert debt["sources"] == []  # Not one pile for the whole trend: each year has its own.
+    documents = {i["fiscal_year"]: {s["document_name"] for s in i["sources"]} for i in debt["inputs"]}
+    assert documents == {2023: {"2024.pdf"}, 2024: {"2024.pdf", "arsredovisning.pdf"}, 2025: {"arsredovisning.pdf"}}
+    assert all(i["status"] == "extracted" and i["formula"] is None for i in debt["inputs"])
+    assert all(s["page"] == 2 and s["printed_label"] for i in debt["inputs"] for s in i["sources"])
+
+
+def test_trend_from_calculated_values_shows_the_formula_per_year(client):
+    # No printed debt per m²; with a total area of 10 000 m² entered for each year it is calculated from the debt:
+    # 4 100 (2023), 4 100 (2024), 4 000 (2025): (4000 - 4100) / 4100 / 2 = -1.22 %/year → (5 + 1.22) / 10 = 62.2 points.
+    cooperative_id = _three_years(client, printed_debt=False)
+    for year in (2023, 2024, 2025):
+        client.post(f"/api/cooperatives/{cooperative_id}/observations",
+                    json={"metric_key": "total_area", "fiscal_year": year, "value": 10_000})
+    debt = _part(client.get(f"/api/cooperatives/{cooperative_id}").json()["score"], "trend:debt_per_sqm_total_area")
+    assert [(i["fiscal_year"], i["value"]) for i in debt["inputs"]] == [(2023, 4_100), (2024, 4_100), (2025, 4_000)]
+    assert debt["part_score"] == pytest.approx(62.2, abs=0.1)
+    assert all(i["status"] == "calculated" and i["formula"] and i["sources"] == [] for i in debt["inputs"])
+
+
+def test_trend_year_corrected_by_the_user_lists_only_the_value_used(client):
+    cooperative_id = _three_years(client)
+    client.post(f"/api/cooperatives/{cooperative_id}/observations",
+                json={"metric_key": "debt_per_sqm_total_area", "fiscal_year": 2023, "value": 3_000})
+    debt = _part(client.get(f"/api/cooperatives/{cooperative_id}").json()["score"], "trend:debt_per_sqm_total_area")
+    first = debt["inputs"][0]
+    assert (first["fiscal_year"], first["value"], first["status"]) == (2023, 3_000, "user_entered")
+    assert [s["value"] for s in first["sources"]] == [3_000]  # The replaced extracted 4 500 is not listed.

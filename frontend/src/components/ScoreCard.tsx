@@ -1,8 +1,9 @@
-import type { CooperativeScore, ScorePart } from '../api'
+import type { CooperativeScore, ScorePart, SourceRef } from '../api'
 import { formatValue } from '../format'
 import { StatusBadge } from './Badges'
 
 const oneDecimal = new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 1 })
+const integer = new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 0 })
 const percent = new Intl.NumberFormat('sv-SE', { style: 'percent', maximumFractionDigits: 0 })
 
 /**
@@ -60,7 +61,15 @@ export function ScoreCard({ score, disclaimer }: { score: CooperativeScore; disc
                     <td>{part.label}</td>
                     <td>
                       {part.value_text ?? formatValue(part.value, part.unit ?? '')}
-                      {part.fiscal_year !== null && <span className="muted"> ({part.fiscal_year})</span>}
+                      {part.fiscal_year !== null && part.inputs.length === 0 && (
+                        <span className="muted"> ({part.fiscal_year})</span>
+                      )}
+                      {part.inputs.length > 0 && (
+                        <div className="muted">
+                          {part.inputs.map((input) => integer.format(input.value)).join(' → ')} (
+                          {part.inputs[0].fiscal_year}–{part.inputs[part.inputs.length - 1].fiscal_year})
+                        </div>
+                      )}
                       <div>
                         <StatusBadge status={part.status} />
                       </div>
@@ -116,16 +125,34 @@ function contribution(part: ScorePart): number {
 
 function Source({ part }: { part: ScorePart }) {
   if (part.source_text) return <span>{part.source_text}</span>
-  if (part.formula) return <span className="muted">Beräknat: {part.formula}</span>
-  if (part.sources.length === 0) return <span className="muted">–</span>
+  if (part.inputs.length > 0) {
+    // A trend: one line per year, so each value can be traced to where it came from.
+    return (
+      <>
+        {part.inputs.map((input) => (
+          <div key={input.fiscal_year}>
+            <span className="muted">{input.fiscal_year}: </span>
+            <SourceList sources={input.sources} formula={input.formula} />
+          </div>
+        ))}
+      </>
+    )
+  }
+  return <SourceList sources={part.sources} formula={part.formula} />
+}
+
+function SourceList({ sources, formula }: { sources: SourceRef[]; formula: string | null }) {
+  if (formula) return <span className="muted">Beräknat: {formula}</span>
+  if (sources.length === 0) return <span className="muted">–</span>
   return (
     <>
-      {part.sources.map((source) => (
-        <div key={source.observation_id}>
+      {sources.map((source, index) => (
+        <span key={source.observation_id}>
+          {index > 0 && '; '}
           {source.document_name ?? (source.status === 'user_entered' ? 'Angivet av dig' : 'Okänd källa')}
           {source.page && `, s. ${source.page}`}
           {source.printed_label && `: ”${source.printed_label}”`}
-        </div>
+        </span>
       ))}
     </>
   )

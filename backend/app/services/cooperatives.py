@@ -17,12 +17,12 @@ from app.domain.metrics import METRICS
 from app.domain.provenance import ExtractionMethod, ValueOrigin, VerificationStatus
 from app.domain.resolution import Observation, ResolvedValue, resolve
 from app.domain.risk import CONCERN_LABELS, ConcernLevel, RiskRules
-from app.domain.score import LAND_TENURE_PART, compute_score
+from app.domain.score import LAND_TENURE_PART, TrendRule, compute_score
 from app.models import FinancialObservation, HousingCooperative, SourceDocument
 from app.schemas import (
     CalculatedValue, Completeness, CooperativeInfo, CooperativeListItem, CooperativeOverview, CooperativeScore,
     DocumentSummary, Finding, MetricSeries, ReportedValue, RiskAssessment, RiskIndicator, ScoreMissingPart,
-    ScorePart, SourceRef, YearValue,
+    ScorePart, SourceRef, TrendInput, YearValue,
 )
 
 # The figures a buyer most needs. Used for the completeness indicator.
@@ -83,11 +83,17 @@ def score_label(score: CooperativeScore | None) -> str | None:
     return score.label if score else None
 
 
-def coverage_text(assessed: int, total: int, weight_share: float, land_tenure_known: bool = False) -> str:
-    """"Baserat på 4 av 6 nyckeltal och marken (77 % av vikten)." Built here only, so every page says the same."""
-    share = math.floor(weight_share * 100 + 0.5)
-    land = " och marken" if land_tenure_known else ""
-    return f"Baserat på {assessed} av {total} nyckeltal{land} ({share} % av vikten)."
+def coverage_text(assessed: int, total: int, core_weight_share: float, land_tenure_known: bool = False,
+                  trends: tuple[int, int] = (0, 0)) -> str:
+    """"Baserat på 4 av 6 nyckeltal och marken (77 % av vikten) och 2 av 2 trender." Built here only.
+
+    The percentage is the share the minimum coverage uses (key figures and land tenure), so a score shown next to
+    it never seems to contradict the rule; the trends are listed after it, as they never decide whether there is one.
+    """
+    share = math.floor(core_weight_share * 100 + 0.5)
+    core = f"{assessed} av {total} nyckeltal" + (" och marken" if land_tenure_known else "")
+    trend_text = f" och {trends[0]} av {trends[1]} trender" if trends[1] else ""
+    return f"Baserat på {core} ({share} % av vikten){trend_text}."
 
 
 def build_overview(cooperative: HousingCooperative, rules: RiskRules) -> CooperativeOverview:
@@ -254,34 +260,102 @@ def _score(cooperative: HousingCooperative, metrics: list[MetricSeries], year: i
     # A conflicting value is never scored, also when it is still displayed (reported vs. calculated).
     usable = {key: v.display_value if v and v.display_status != VerificationStatus.CONFLICTING.value else None
               for key, v in year_values.items()}
-    result = compute_score(usable, rules, land_tenure=cooperative.land_tenure)
-    parts = [
-        _land_tenure_part(cooperative, part, rules) if part.metric_key == LAND_TENURE_PART else ScorePart(
-            key=part.metric_key, label=METRICS[part.metric_key].label, value=part.value, value_text=None,
-            unit=METRICS[part.metric_key].unit.value, fiscal_year=year, source_text=None,
-            status=year_values[part.metric_key].display_status, rule=_scale_rule(rules, part.metric_key),
-            part_score=part.part_score, weight=part.weight,
-            weight_reason=rules.score.weights[part.metric_key].reason, effective_weight=part.effective_weight,
-            **_part_provenance(year_values[part.metric_key]),
-        )
-        for part in result.parts
-    ]
-    missing = [
-        ScoreMissingPart(key=key, label="Mark", reason="Okänt om föreningen äger marken eller har tomträtt.")
-        if key == LAND_TENURE_PART else
-        ScoreMissingPart(key=key, label=METRICS[key].label, reason=_missing_part_reason(year_values[key], year))
-        for key in result.missing
-    ]
-    key_figures = sum(1 for part in parts if part.key != LAND_TENURE_PART)
+    trends = {key: _trend_years(metrics, trend, year) for key, trend in rules.score.trends.items()}
+    result = compute_score(usable, rules, land_tenure=cooperative.land_tenure,
+                           trends={key: info.change for key, info in trends.items()})
+    parts = []
+    for part in result.parts:
+        if part.metric_key == LAND_TENURE_PART:
+            parts.append(_land_tenure_part(cooperative, part, rules))
+        elif part.metric_key in trends:
+            parts.append(_trend_part(rules.score.trends[part.metric_key], trends[part.metric_key], part, year))
+        else:
+            parts.append(ScorePart(
+                key=part.metric_key, label=METRICS[part.metric_key].label, value=part.value, value_text=None,
+                unit=METRICS[part.metric_key].unit.value, fiscal_year=year, source_text=None,
+                status=year_values[part.metric_key].display_status, rule=_scale_rule(rules, part.metric_key),
+                part_score=part.part_score, weight=part.weight,
+                weight_reason=rules.score.weights[part.metric_key].reason, effective_weight=part.effective_weight,
+                **_part_provenance(year_values[part.metric_key]),
+            ))
+    missing = []
+    for key in result.missing:
+        if key == LAND_TENURE_PART:
+            missing.append(ScoreMissingPart(key=key, label="Mark",
+                                            reason="Okänt om föreningen äger marken eller har tomträtt."))
+        elif key in trends:
+            missing.append(ScoreMissingPart(key=key, label=_trend_label(rules.score.trends[key]),
+                                            reason=trends[key].reason))
+        else:
+            missing.append(ScoreMissingPart(key=key, label=METRICS[key].label,
+                                            reason=_missing_part_reason(year_values[key], year)))
+    key_figures = sum(1 for part in parts if part.key in rules.score.weights)
+    trends_present = sum(1 for part in parts if part.key in trends)
     insufficient = CONCERN_LABELS[ConcernLevel.INSUFFICIENT_INFORMATION]
     return CooperativeScore(
         score=result.score, label=None if result.score is not None else insufficient,
         rule=rules.score.describe(), weight_share=result.weight_share, key_figures_assessed=key_figures,
         key_figures_total=len(rules.score.weights),
-        coverage=coverage_text(key_figures, len(rules.score.weights), result.weight_share,
+        coverage=coverage_text(key_figures, len(rules.score.weights), result.core_weight_share,
                                land_tenure_known=LAND_TENURE_PART not in result.missing
-                               and rules.score.land_tenure is not None),
+                               and rules.score.land_tenure is not None,
+                               trends=(trends_present, len(trends))),
         parts=parts, missing=missing,
+    )
+
+
+@dataclass
+class _TrendYears:
+    """The years a trend uses and its change per year; or, when it cannot be computed, why not."""
+
+    change: float | None
+    values: list[tuple[int, YearValue]]
+    reason: str | None
+
+
+def _trend_years(metrics: list[MetricSeries], trend: TrendRule, year: int | None) -> _TrendYears:
+    """The trend's latest `years` fiscal years, each of which needs an agreed value; never interpolated."""
+    if year is None:
+        return _TrendYears(None, [], "Inget räkenskapsår att bedöma.")
+    values = []
+    for fiscal_year in range(year - trend.years + 1, year + 1):
+        year_value = _year_value_of(metrics, trend.metric_key, fiscal_year)
+        if year_value is not None and year_value.display_status == VerificationStatus.CONFLICTING.value:
+            return _TrendYears(None, [], f"Motstridiga uppgifter för räkenskapsår {fiscal_year}.")
+        if year_value is None or year_value.display_value is None:
+            return _TrendYears(None, [], f"Saknas för räkenskapsår {fiscal_year}.")
+        values.append((fiscal_year, year_value))
+    change = trend.change([v.display_value for _, v in values])
+    if change is None:
+        first_year = values[0][0]
+        return _TrendYears(None, [], f"Kan inte räknas i procent eftersom värdet för {first_year} är noll eller "
+                                     f"negativt.")
+    return _TrendYears(change, values, None)
+
+
+def _trend_input(fiscal_year: int, year_value: YearValue) -> TrendInput:
+    """One trend year with its own provenance: only the sources of the value used, or our formula."""
+    provenance = _part_provenance(year_value)
+    used = [source for source in provenance["sources"] if math.isclose(source.value, year_value.display_value)]
+    return TrendInput(fiscal_year=fiscal_year, value=year_value.display_value, status=year_value.display_status,
+                      sources=used, formula=provenance["formula"])
+
+
+def _trend_label(trend: TrendRule) -> str:
+    return f"{METRICS[trend.metric_key].label}, förändring"
+
+
+def _trend_part(trend: TrendRule, info: _TrendYears, part, year: int) -> ScorePart:
+    """A trend part with the years and values it used, and each year's sources."""
+    figure_unit = METRICS[trend.metric_key].unit.value
+    shown_unit = _SHOWN_UNITS.get(figure_unit, figure_unit)
+    unit = "% per år" if trend.measure == "percent_per_year" else f"{shown_unit} per år"
+    return ScorePart(
+        key=trend.key, label=_trend_label(trend), value=part.value, value_text=None, unit=unit, fiscal_year=year,
+        status=VerificationStatus.CALCULATED.value, sources=[], source_text=None, formula=None,
+        inputs=[_trend_input(fiscal_year, v) for fiscal_year, v in info.values],
+        rule=trend.describe(shown_unit), part_score=part.part_score, weight=part.weight,
+        weight_reason=trend.reason, effective_weight=part.effective_weight,
     )
 
 

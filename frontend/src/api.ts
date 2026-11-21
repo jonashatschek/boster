@@ -142,6 +142,14 @@ export interface ScorePart {
   source_text: string | null
   /** Set when Boster calculated the value. */
   formula: string | null
+  /** For a trend: the years and values it used, oldest first, each with its own source. */
+  inputs: {
+    fiscal_year: number
+    value: number
+    status: VerificationStatus
+    sources: SourceRef[]
+    formula: string | null
+  }[]
   rule: string
   part_score: number
   weight: number
