@@ -82,3 +82,12 @@ reason = "En låg andel avgiftsintäkter gör föreningen beroende av hyresintä
 [score.weights.short_term_debt_share_pct]
 weight = 10
 reason = "Lån som förfaller inom ett år ger kortsiktig exponering mot nya räntor."
+
+# Land tenure as a part of the score: a fixed part score for owned land and for leasehold
+# (tomträtt). Unknown tenure is a missing part. It counts in the weight, but not toward
+# min_key_figures, which counts only the key figures above.
+[score.land_tenure]
+weight = 10
+owned = 100
+leasehold = 0
+reason = "Med tomträtt betalar föreningen en avgäld som omförhandlas med jämna mellanrum och kan höjas kraftigt."

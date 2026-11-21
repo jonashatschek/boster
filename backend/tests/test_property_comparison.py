@@ -87,8 +87,8 @@ def test_cooperative_name_and_risk_indicators_per_apartment(client, two_properti
     score = row(comparison, "cooperative_score")
     assert score["label"] == "Föreningens poäng"
     linked_cell, unlinked_cell = score["cells"]
-    assert linked_cell["value"] == 47 == comparison["properties"][0]["cooperative_score"]
-    assert linked_cell["note"] == "Baserat på 4 av 6 nyckeltal (75 % av vikten)."
+    assert linked_cell["value"] == 41 == comparison["properties"][0]["cooperative_score"]
+    assert linked_cell["note"] == "Baserat på 4 av 6 nyckeltal och marken (77 % av vikten)."
     assert linked_cell["level"] is None  # A number, not a verdict colour.
     assert unlinked_cell["value"] is None and unlinked_cell["status"] == "missing"
     assert "overall_level" not in comparison["properties"][0]

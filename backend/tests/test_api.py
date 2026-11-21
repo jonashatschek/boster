@@ -64,11 +64,11 @@ def test_risk_assessment_uses_several_indicators(client):
 
 
 def test_cooperative_list_shows_the_score(client):
-    upload(client, make_report_pdf())  # Score 47, see test_overview_has_score_with_its_explanation.
+    upload(client, make_report_pdf())  # Score 41, see test_overview_has_score_with_its_explanation.
     upload(client, make_report_pdf(name="Brf Glesa", organisation_number="769600-5678",
                                    key_figures=[("Sparande, kr/kvm", "90", "120")]))
     items = {item["name"]: item for item in client.get("/api/cooperatives").json()}
-    assert (items["Brf Provhuset"]["score"], items["Brf Provhuset"]["score_label"]) == (47, None)
+    assert (items["Brf Provhuset"]["score"], items["Brf Provhuset"]["score_label"]) == (41, None)
     assert "overall_level" not in items["Brf Provhuset"]
     # Only savings and the calculated short-term debt share: too little for a score.
     assert (items["Brf Glesa"]["score"], items["Brf Glesa"]["score_label"]) == (None, "Otillräcklig information")
@@ -229,20 +229,20 @@ def test_startup_adds_columns_missing_from_an_older_database(tmp_path):
 
 def test_overview_has_score_with_its_explanation(client):
     # Default report: debt 4 000 kr/m² (part 100, weight 25), savings 90 kr/m² (0, 20), interest
-    # sensitivity 12 % (0, 20), short-term debt 0 % (100, 10); fee share and interest coverage missing.
-    # (100·25 + 0·20 + 0·20 + 100·10) / 75 = 46.7 → 47, with 75 % of the weight.
+    # sensitivity 12 % (0, 20), short-term debt 0 % (100, 10), land tenure "tomträtt" (0, 10); fee share and
+    # interest coverage missing. (100·25 + 0·20 + 0·20 + 100·10 + 0·10) / 85 = 41.2 → 41, with 85/110 of the weight.
     cooperative_id = upload(client, make_report_pdf()).json()["cooperative_id"]
     score = client.get(f"/api/cooperatives/{cooperative_id}").json()["score"]
-    assert score["score"] == 47
-    assert score["weight_share"] == pytest.approx(0.75)
+    assert score["score"] == 41
+    assert score["weight_share"] == pytest.approx(85 / 110)
     assert score["key_figures_assessed"] == 4
     assert score["key_figures_total"] == 6
-    assert score["coverage"] == "Baserat på 4 av 6 nyckeltal (75 % av vikten)."
+    assert score["coverage"] == "Baserat på 4 av 6 nyckeltal och marken (77 % av vikten)."
     parts = {p["key"]: p for p in score["parts"]}
     assert parts["debt_per_sqm_total_area"]["part_score"] == 100
     assert parts["debt_per_sqm_total_area"]["value"] == 4_000
     assert parts["debt_per_sqm_total_area"]["weight"] == 25
-    assert parts["debt_per_sqm_total_area"]["effective_weight"] == pytest.approx(25 / 75)
+    assert parts["debt_per_sqm_total_area"]["effective_weight"] == pytest.approx(25 / 85)
     assert parts["debt_per_sqm_total_area"]["fiscal_year"] == 2025
     assert parts["debt_per_sqm_total_area"]["label"] == "Skuldsättning per kvm totalyta"
     assert parts["debt_per_sqm_total_area"]["weight_reason"]
@@ -272,16 +272,19 @@ def test_conflicting_key_figure_is_a_missing_part_of_the_score(client):
 
 
 # Expected scores worked out by hand from the printed key figures, the rules and the weights in
-# config/risk_rules.toml (weights: debt 25, sensitivity 20, savings 20, coverage 15, fee share 10, short-term 10).
+# config/risk_rules.toml (weights: debt 25, sensitivity 20, savings 20, coverage 15, fee share 10, short-term 10,
+# land tenure 10: owned 100, leasehold 0).
 SAMPLE_SCORES = {
     # Debt 1 443 → 100; sensitivity 2 % → 100; savings 151 → (151-100)/(200-100) = 51; interest coverage
-    # 1.52 → (1.52-1.2)/(2-1.2) ≈ 40; short-term debt 100 % → 0; fee share missing (weight 90 of 100).
-    # (2500 + 2000 + 1020 + 603 + 0) / 90 = 68.0 → 68.
+    # 1.52 → (1.52-1.2)/(2-1.2) ≈ 40; short-term debt 100 % → 0; fee share and land tenure missing
+    # (weight 90 of 110). (2500 + 2000 + 1020 + 603 + 0) / 90 = 68.0 → 68.
     "702002-3532_arsredovisning.pdf": 68,
-    # Savings 122 → 22, everything else 100: (2500 + 2000 + 440 + 1500 + 1000 + 1000) / 100 = 84.4 → 84.
-    "byamannen2_arsredovisning_2025.pdf": 84,
-    # Short-term debt 33.3 % → (60-33.3)/(60-30) ≈ 89, everything else 100: (9000 + 891) / 100 = 98.9 → 99.
-    "segelflygaren_arsredovisning.pdf": 99,
+    # Savings 122 → 22, the other key figures 100, tomträtt 0: (2500 + 2000 + 440 + 1500 + 1000 + 1000 + 0) / 110
+    # = 76.7 → 77.
+    "byamannen2_arsredovisning_2025.pdf": 77,
+    # Short-term debt 33.3 % → (60-33.3)/(60-30) ≈ 89, the other key figures 100, tomträtt 0:
+    # (9000 + 891 + 0) / 110 = 89.9 → 90.
+    "segelflygaren_arsredovisning.pdf": 90,
 }
 
 
@@ -297,7 +300,8 @@ def test_score_of_real_reports(client, filename, expected):
 def test_value_that_disagrees_with_our_calculation_is_a_missing_part(client):
     # A manual total area of 5 000 m² gives a calculated debt per m² of 8 000, which disagrees with the
     # printed 4 000: the value stays visible but is "conflicting", so the score leaves it out.
-    # Remaining: savings 0 (20), sensitivity 0 (20), short-term debt 100 (10): 1000 / 50 = 20, at 50 % of the weight.
+    # Remaining: savings 0 (20), sensitivity 0 (20), short-term debt 100 (10), tomträtt 0 (10): 1000 / 60 = 16.7 → 17,
+    # at 60/110 of the weight.
     cooperative_id = upload(client, make_report_pdf()).json()["cooperative_id"]
     client.post(f"/api/cooperatives/{cooperative_id}/observations",
                 json={"metric_key": "total_area", "fiscal_year": 2025, "value": 5_000})
@@ -305,7 +309,7 @@ def test_value_that_disagrees_with_our_calculation_is_a_missing_part(client):
     assert "debt_per_sqm_total_area" not in {p["key"] for p in score["parts"]}
     assert {m["key"]: m["reason"] for m in score["missing"]}["debt_per_sqm_total_area"] == (
         "Motstridiga uppgifter för räkenskapsår 2025.")
-    assert score["score"] == 20
+    assert score["score"] == 17
 
 
 def test_score_parts_carry_their_sources(client):
@@ -317,3 +321,38 @@ def test_score_parts_carry_their_sources(client):
     short_term = parts["short_term_debt_share_pct"]  # Calculated by Boster from two balance sheet rows.
     assert short_term["sources"] == []
     assert short_term["formula"]
+
+
+def _land_part(score):
+    return next((p for p in score["parts"] if p["key"] == "land_tenure"), None)
+
+
+def test_land_tenure_is_a_part_of_the_score_with_its_source(client):
+    cooperative_id = upload(client, make_report_pdf()).json()["cooperative_id"]  # "Fastigheten innehas med tomträtt."
+    land = _land_part(client.get(f"/api/cooperatives/{cooperative_id}").json()["score"])
+    assert (land["label"], land["value_text"], land["part_score"], land["weight"]) == ("Mark", "Tomträtt", 0, 10)
+    assert land["value"] is None and land["fiscal_year"] is None
+    assert land["status"] == "extracted"
+    assert "tomträtt" in land["source_text"] and "s. 1" in land["source_text"]  # The quoted line with its page.
+    assert land["rule"] == "100 poäng med äganderätt till marken, 0 poäng med tomträtt. Okänt räknas inte."
+
+
+def test_land_tenure_set_by_the_user_counts_and_is_marked_as_such(client):
+    # Changed by hand to owned land: (100·25 + 0 + 0 + 100·10 + 100·10) / 85 = 52.9 → 53.
+    cooperative_id = upload(client, make_report_pdf()).json()["cooperative_id"]
+    client.patch(f"/api/cooperatives/{cooperative_id}", json={"land_tenure": "owned"})
+    score = client.get(f"/api/cooperatives/{cooperative_id}").json()["score"]
+    land = _land_part(score)
+    assert (land["value_text"], land["part_score"], land["status"]) == ("Äganderätt", 100, "user_entered")
+    assert land["source_text"] == "Angivet manuellt."
+    assert score["score"] == 53
+
+
+def test_unknown_land_tenure_is_a_missing_part_of_the_score(client):
+    cooperative_id = upload(client, make_report_pdf(land="Föreningen förvaltar fastigheten.")).json()["cooperative_id"]
+    score = client.get(f"/api/cooperatives/{cooperative_id}").json()["score"]
+    assert _land_part(score) is None
+    assert {m["key"]: m["reason"] for m in score["missing"]}["land_tenure"] == (
+        "Okänt om föreningen äger marken eller har tomträtt.")
+    assert score["score"] == 47  # As without land tenure: (2500 + 1000) / 75.
+    assert score["coverage"] == "Baserat på 4 av 6 nyckeltal (68 % av vikten)."

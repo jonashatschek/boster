@@ -213,7 +213,7 @@ def test_list_shows_cooperative_risk(client):
     client.post("/api/properties/from-text", json={"text": HEMNET_STYLE})
     [item] = client.get("/api/properties").json()
     assert item["asking_price"] == 4_250_000
-    assert (item["cooperative_score"], item["cooperative_score_label"]) == (47, None)  # Default report: 47.
+    assert (item["cooperative_score"], item["cooperative_score_label"]) == (41, None)  # Default report: 41.
     assert "cooperative_overall_level" not in item
 
 

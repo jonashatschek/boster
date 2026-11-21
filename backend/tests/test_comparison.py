@@ -51,9 +51,10 @@ def test_compares_latest_values_side_by_side(client, two_cooperatives):
 
 def test_each_cooperative_shows_its_score_without_ranking(client, two_cooperatives):
     first, second = two_cooperatives
-    # Brf Jämförelsen: debt 2 000, savings 250, sensitivity 3 %, short-term debt 0 %: all 100 → 100.
+    # Brf Jämförelsen: debt 2 000, savings 250, sensitivity 3 %, short-term debt 0 %: all four 100.
     # Asked for in the order (first, second) and (second, first): the order follows the request, never the score.
-    for ids, expected in (((first, second), [47, 100]), ((second, first), [100, 47])):
+    # Both reports say "tomträtt" (land tenure 0, weight 10): 41 and (100·75 + 0·10) / 85 = 88.2 → 88.
+    for ids, expected in (((first, second), [41, 88]), ((second, first), [88, 41])):
         cooperatives = compare(client, *ids).json()["cooperatives"]
         assert [c["score"] for c in cooperatives] == expected
         assert all(c["score_label"] is None and "overall_level" not in c for c in cooperatives)
