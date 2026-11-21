@@ -492,9 +492,68 @@ def _extract_areas(pages: list[PageLayout]) -> list[ExtractedFigure]:
                         metric_key, 0, value, page.page_number, match.group(0).strip(),
                         ExtractionMethod.PDF_TEXT_PATTERN, ValueOrigin.REPORTED,
                     ))
-        for figure in _areas_from_header_table(page).values():
+        for figure in [*_areas_from_header_table(page).values(), *_areas_from_object_table(page)]:
             found.setdefault((figure.metric_key, figure.value), figure)
     return list(found.values())
+
+
+# HSB's object table: "Antal | Benämning | m2 (Total yta)", one row per kind of space, then
+# "Totalt <n> objekt <area>". The total matches the area the report uses for its per-m² key figures.
+_OBJECT_TABLE_ROWS = 20
+_OBJECT_TENANT_OWNED = "lägenheter (upplåtna med bostadsrätt)"
+_OBJECT_COMMERCIAL = "lokaler (hyresrätt)"
+
+
+def _areas_from_object_table(page: PageLayout) -> list[ExtractedFigure]:
+    """Total, tenant-owned and commercial area from HSB's object table. Rows are never added together.
+
+    Only single printed rows are read: "Totalt" (total area), the tenant-owned apartments, and the
+    rented-out premises when they are the table's only kind of premises. Other rows (garage, storage,
+    rental apartments) are ignored, and so is a kind listed more than once.
+
+    The header is "Antal | Benämning" with "Total yta" in the same row or the next. The unit "m²" is
+    not required: pdf.js (used in the app) splits its superscript onto a line of its own.
+    """
+    for index, row in enumerate(page.rows):
+        texts = [cell.text.lower() for cell in row.cells]
+        if texts[:2] != ["antal", "benämning"]:
+            continue
+        header_rows = [row, *page.rows[index + 1:index + 2]]
+        title_row = next((i for i, r in enumerate(header_rows) if "total yta" in r.text.lower()), None)
+        if title_row is None:
+            continue
+        kinds: dict[str, tuple[str, float]] = {}
+        repeated: set[str] = set()
+        figures = []
+        for table_row in page.rows[index + 1 + title_row:index + 1 + title_row + _OBJECT_TABLE_ROWS]:
+            cells = table_row.cells
+            if "total yta" in table_row.text.lower():
+                continue  # The rest of the header.
+            if cells and cells[0].text.lower() == "totalt" and cells[-1].number:
+                label = " ".join(cell.text for cell in cells[:-1])
+                figures.append(ExtractedFigure("total_area", 0, cells[-1].number, page.page_number, label,
+                                               ExtractionMethod.PDF_TEXT_PATTERN, ValueOrigin.REPORTED))
+                break
+            # A table row is "<count> <kind> <area>"; anything else ends the table.
+            if len(cells) < 3 or not cells[0].is_numeric or not cells[-1].is_numeric:
+                break
+            kind = " ".join(cell.text for cell in cells[1:-1])
+            if kind.lower() in kinds:
+                repeated.add(kind.lower())
+            kinds[kind.lower()] = (kind, cells[-1].number)
+        premises = [kind for kind in kinds if kind.startswith("lokaler")]  # Before repeated kinds are dropped.
+        for kind in repeated:
+            del kinds[kind]
+        if kinds.get(_OBJECT_TENANT_OWNED, ("", 0))[1]:
+            label, area = kinds[_OBJECT_TENANT_OWNED]
+            figures.append(ExtractedFigure("tenant_owned_area", 0, area, page.page_number, label,
+                                           ExtractionMethod.PDF_TEXT_PATTERN, ValueOrigin.REPORTED))
+        if premises == [_OBJECT_COMMERCIAL] and _OBJECT_COMMERCIAL in kinds and kinds[_OBJECT_COMMERCIAL][1]:
+            label, area = kinds[_OBJECT_COMMERCIAL]
+            figures.append(ExtractedFigure("commercial_area", 0, area, page.page_number, label,
+                                           ExtractionMethod.PDF_TEXT_PATTERN, ValueOrigin.REPORTED))
+        return figures
+    return []
 
 
 def _areas_from_header_table(page: PageLayout) -> dict[str, ExtractedFigure]:

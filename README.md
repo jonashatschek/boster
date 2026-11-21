@@ -179,7 +179,7 @@ specs/spec.md     Product specification
 ## Known limitations
 
 - **No OCR yet.** Scanned PDFs, such as many economic plans (*ekonomiska planer*), are detected and flagged, but no figures are read from them.
-- **The total area is often missing.** Many reports state areas in formats that Boster doesn't recognise yet. Enter the area by hand (click the value, or *Ange* under *Fullständighet*) to enable the per-m² calculations.
+- **The total area is sometimes missing.** Boster reads areas from running text (e.g. "Total bostadsarea 15 575 m²", "BOA/LOA"), from "Bostadsyta | Lokalyta | Totalyta" tables, and from HSB's object table ("Antal | Benämning | m2", whose "Totalt … objekt" row is the total area the report uses for its key figures; rows are never added together). Other formats aren't recognised yet. Enter the area by hand (click the value, or *Ange* under *Fullständighet*) to enable the per-m² calculations.
 - **HSB cooperatives' cash looks too low.** HSB cooperatives keep most of their cash in an account held by HSB, which the report lists as a receivable. Their *Kassa och bank* figure is therefore small.
 - **Listings must be pasted.** The text extractor is tested on the layouts Hemnet, Booli and agents' sites produce when copied, but a site redesign can break it. Missing fields are listed so you can fill them in.
 - **Public transport covers only the nearest stop of each type.** It doesn't rank stops by how useful their connections are, show departures, or give travel times to a destination. The stop nearest in a straight line is the one routed, so in rare cases another stop could be closer on foot. Trams, regional trains and ferries are not shown.

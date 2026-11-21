@@ -151,3 +151,90 @@ def test_fiscal_year_comes_from_the_stated_period():
     extraction = extract()
     assert extraction.fiscal_year == 2025
     assert extraction.warnings == [w for w in extraction.warnings if "månader" not in w]  # 12 months: no warning.
+
+
+# HSB's object table: "Antal | Benämning | m2" with "Total yta" under the area column, one row per
+# kind of space, and a "Totalt … objekt …" row. Cells at the x positions used in HSB's reports.
+def object_row(page_number, y, cells):
+    return Row(page_number, y, [Cell(text, x - 3 * len(text), x + 3 * len(text), y, y + 9) for text, x in cells])
+
+
+PYMUPDF_HEADER = [[("Antal", 55), ("Benämning", 186), ("m2", 539)], [("Total yta", 510)]]
+# pdf.js (used in the app) puts the superscript "2" of "m²" on its own line, so the unit is split.
+PDFJS_HEADER = [[("Antal", 55), ("Benämning", 186), ("2", 543)], [("Total yta m", 516)]]
+
+
+def object_table_page(rows, header=PYMUPDF_HEADER, total=True, after=()):
+    lines = [object_row(7, 50 + 10 * i, cells) for i, cells in enumerate(header)]
+    lines += [object_row(7, 70 + 10 * i, [(count, 48), (kind, 200), (area, 536)]) for i, (count, kind, area) in enumerate(rows)]
+    y = 70 + 10 * len(rows)
+    if total:
+        lines.append(object_row(7, y, [("Totalt", 60), ("552", 110), ("objekt", 150), ("26 370", 536)]))
+        y += 10
+    lines += [object_row(7, y + 10 * i, cells) for i, cells in enumerate(after)]
+    return page(7, lines)
+
+
+def areas_of(area_page):
+    extraction = extract_from_pages([COVER, KEY_FIGURES, INCOME_STATEMENT, BALANCE_SHEET, area_page])
+    return {(f.metric_key, f.value, f.printed_label) for f in extraction.figures
+            if f.metric_key in ("total_area", "tenant_owned_area", "commercial_area", "residential_area")}
+
+
+def test_hsb_object_table_gives_total_tenant_owned_and_commercial_area():
+    areas = areas_of(object_table_page([
+        ("46", "garageplatser", "690"),
+        ("37", "lokaler (hyresrätt)", "946"),
+        ("333", "lägenheter (upplåtna med bostadsrätt)", "24 551"),
+        ("5", "lägenheter (hyresrätt)", "488"),
+    ]))
+    assert areas == {
+        ("total_area", 26_370, "Totalt 552 objekt"),
+        ("tenant_owned_area", 24_551, "lägenheter (upplåtna med bostadsrätt)"),
+        ("commercial_area", 946, "lokaler (hyresrätt)"),
+    }  # Garage and rental apartments are ignored, and no residential area is made up by adding rows.
+
+
+def test_hsb_object_table_with_two_kinds_of_premises_gives_no_commercial_area():
+    areas = areas_of(object_table_page([
+        ("37", "lokaler (hyresrätt)", "946"),
+        ("2", "lokaler (bostadsrätt)", "120"),
+        ("333", "lägenheter (upplåtna med bostadsrätt)", "24 551"),
+    ]))
+    assert {metric for metric, _, _ in areas} == {"total_area", "tenant_owned_area"}
+
+
+def test_hsb_object_table_is_found_when_pdfjs_splits_the_unit():
+    areas = areas_of(object_table_page([
+        ("37", "lokaler (hyresrätt)", "946"),
+        ("333", "lägenheter (upplåtna med bostadsrätt)", "24 551"),
+    ], header=PDFJS_HEADER))
+    assert {(metric, value) for metric, value, _ in areas} == {
+        ("total_area", 26_370), ("tenant_owned_area", 24_551), ("commercial_area", 946)}
+
+
+def test_hsb_object_table_without_total_row_stops_at_the_end_of_the_table():
+    # A later, unrelated line that happens to look like premises must not be read as part of the table.
+    areas = areas_of(object_table_page(
+        [("333", "lägenheter (upplåtna med bostadsrätt)", "24 551")], total=False,
+        after=[[("Föreningens lägenheter fördelas på:", 111)], [("3", 48), ("lokaler (hyresrätt)", 200), ("500", 536)]]))
+    assert {metric for metric, _, _ in areas} == {"tenant_owned_area"}
+
+
+def test_hsb_object_table_kind_listed_twice_is_not_read():
+    areas = areas_of(object_table_page([
+        ("37", "lokaler (hyresrätt)", "946"),
+        ("2", "lokaler (hyresrätt)", "120"),
+        ("333", "lägenheter (upplåtna med bostadsrätt)", "24 551"),
+    ]))
+    assert {metric for metric, _, _ in areas} == {"total_area", "tenant_owned_area"}
+
+
+def test_hsb_object_table_repeated_premises_still_count_as_another_kind():
+    areas = areas_of(object_table_page([
+        ("37", "lokaler (hyresrätt)", "946"),
+        ("2", "lokaler (bostadsrätt)", "120"),
+        ("1", "lokaler (bostadsrätt)", "80"),
+        ("333", "lägenheter (upplåtna med bostadsrätt)", "24 551"),
+    ]))
+    assert {metric for metric, _, _ in areas} == {"total_area", "tenant_owned_area"}
