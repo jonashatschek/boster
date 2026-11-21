@@ -16,7 +16,9 @@ from app.schemas import (
     ComparedProperty, CooperativeOverview, DerivedValue, PropertyComparison, PropertyComparisonCell,
     PropertyComparisonRow,
 )
-from app.services.cooperatives import build_overview, load_cooperative
+from app.services.cooperatives import (
+    build_overview, load_cooperative, score_label, score_value,
+)
 from app.services.properties import FIELDS, derived_values, listing_field, missing_important_fields
 from app.services.transport import transport_info
 from app.transport.nearby import TRANSPORT_LABELS, TransportType
@@ -83,8 +85,8 @@ def _compared(apartment: _Apartment) -> ComparedProperty:
         cooperative_id=overview.cooperative.id if overview else None,
         cooperative_name=overview.cooperative.name if overview else listing.cooperative_name,
         fiscal_year=overview.latest_fiscal_year if overview else None,
-        overall_level=overview.risk.overall_level if overview else None,
-        overall_label=overview.risk.overall_label if overview else None,
+        cooperative_score=score_value(overview.score) if overview else None,
+        cooperative_score_label=score_label(overview.score) if overview else None,
         maintenance=overview.findings if overview else [],
     )
 
@@ -188,27 +190,34 @@ def _no_cooperative_note(listing: Property) -> str:
     return f"{NO_COOPERATIVE}."
 
 
+def _cooperative_score_cell(property_id: int, overview: CooperativeOverview) -> PropertyComparisonCell:
+    """The cooperative's 0–100 score, with its coverage; a number, never a verdict colour."""
+    score = overview.score
+    if score is None or score.score is None:
+        note = f"{score.label}. {score.coverage}" if score else None
+        return PropertyComparisonCell(property_id=property_id, value=None, status=MISSING, note=note,
+                                      fiscal_year=overview.latest_fiscal_year)
+    return PropertyComparisonCell(property_id=property_id, value=score.score, status="calculated",
+                                  note=score.coverage, fiscal_year=overview.latest_fiscal_year)
+
+
 def _cooperative_rows(apartments: list[_Apartment], rules: RiskRules) -> list[PropertyComparisonRow]:
-    name_cells, overall_cells = [], []
+    name_cells, score_cells = [], []
     for apartment in apartments:
         overview, property_id = apartment.overview, apartment.listing.id
         if overview is None:
             note = _no_cooperative_note(apartment.listing)
             name_cells.append(PropertyComparisonCell(property_id=property_id, value=None, status=MISSING, note=note))
-            overall_cells.append(PropertyComparisonCell(property_id=property_id, value=None, status=MISSING, note=note))
+            score_cells.append(PropertyComparisonCell(property_id=property_id, value=None, status=MISSING, note=note))
             continue
         name_cells.append(_cooperative_name_cell(apartment))
-        overall_cells.append(PropertyComparisonCell(
-            property_id=property_id, value=overview.risk.overall_label, status="calculated",
-            note=overview.risk.overall_rule, level=overview.risk.overall_level,
-            level_label=overview.risk.overall_label, fiscal_year=overview.risk.fiscal_year,
-        ))
+        score_cells.append(_cooperative_score_cell(property_id, overview))
 
     rows = [
         PropertyComparisonRow(key="cooperative", group="Förening", label="Förening", kind="text", unit=None,
                               cells=name_cells),
-        PropertyComparisonRow(key="cooperative_overall", group="Förening", label="Samlad riskbedömning",
-                              kind="level", unit=None, cells=overall_cells),
+        PropertyComparisonRow(key="cooperative_score", group="Förening", label="Föreningens poäng",
+                              kind="integer", unit="/ 100", cells=score_cells),
     ]
     for key in rules.indicators:
         definition = METRICS[key]

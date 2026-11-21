@@ -14,6 +14,7 @@ import { ConcernBadge } from '../components/Badges'
 import { DocumentLink } from '../components/DocumentLink'
 import { DocumentUploader } from '../components/DocumentUploader'
 import { MetricChart } from '../components/MetricChart'
+import { ScoreCard } from '../components/ScoreCard'
 import { ValueDetails } from '../components/ValueDetails'
 import {
   DOCUMENT_TYPE_LABELS,
@@ -111,15 +112,13 @@ export function CooperativePage() {
       )}
 
       <section className="card">
-        <div className="spread">
-          <h2>Riskbedömning {risk.fiscal_year && <span className="muted">({risk.fiscal_year})</span>}</h2>
-          <ConcernBadge level={risk.overall_level} label={`Samlat: ${risk.overall_label}`} />
-        </div>
-        <p className="small muted">{risk.disclaimer}</p>
-        <details>
-          <summary>Hur den samlade bedömningen görs</summary>
-          <p className="small">{risk.overall_rule} Gränserna står i backend/config/risk_rules.toml i källkoden.</p>
-        </details>
+        <h2>Riskbedömning {risk.fiscal_year && <span className="muted">({risk.fiscal_year})</span>}</h2>
+        {overview.score ? (
+          <ScoreCard score={overview.score} disclaimer={risk.disclaimer} />
+        ) : (
+          <p className="small muted">{risk.disclaimer}</p>
+        )}
+        <h3>Nyckeltal som bedöms</h3>
         <div className="risk-grid">
           {risk.indicators.map((indicator) => (
             <div className={`risk-card ${indicator.level}`} key={indicator.key}>

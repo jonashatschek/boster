@@ -2,7 +2,8 @@
 
 The thresholds live in ``config/risk_rules.toml`` so they can be tuned without
 touching code. The result is descriptive ("Låg risk", "Hög risk"), always comes with
-the rule that produced it, and is never presented as an objective credit rating.
+the rule that produced it, and is never presented as an objective credit rating. The
+cooperative's overall summary is the 0–100 score (``score.py``), not a rule here.
 """
 
 import tomllib
@@ -56,38 +57,8 @@ class IndicatorRule:
 
 
 @dataclass(frozen=True)
-class OverallRule:
-    min_assessed_indicators: int
-    high_when_high_count_at_least: int
-    high_when_one_high_and_moderate_count_at_least: int
-    moderate_when_moderate_count_at_least: int
-
-    def assess(self, levels: list[ConcernLevel]) -> ConcernLevel:
-        assessed = [level for level in levels if level != ConcernLevel.INSUFFICIENT_INFORMATION]
-        if len(assessed) < self.min_assessed_indicators:
-            return ConcernLevel.INSUFFICIENT_INFORMATION
-        high = assessed.count(ConcernLevel.HIGH)
-        moderate = assessed.count(ConcernLevel.MODERATE)
-        if high >= self.high_when_high_count_at_least:
-            return ConcernLevel.HIGH
-        if high == 1 and moderate >= self.high_when_one_high_and_moderate_count_at_least:
-            return ConcernLevel.HIGH
-        if high == 1 or moderate >= self.moderate_when_moderate_count_at_least:
-            return ConcernLevel.MODERATE
-        return ConcernLevel.LOW
-
-    def describe(self) -> str:
-        return (f"Minst {self.min_assessed_indicators} indikatorer krävs. "
-                f"Hög risk om minst {self.high_when_high_count_at_least} indikatorer visar hög risk, "
-                f"eller en visar hög och minst {self.high_when_one_high_and_moderate_count_at_least} måttlig. "
-                f"Måttlig risk om en indikator visar hög risk eller minst "
-                f"{self.moderate_when_moderate_count_at_least} visar måttlig. Annars låg risk.")
-
-
-@dataclass(frozen=True)
 class RiskRules:
     indicators: dict[str, IndicatorRule]
-    overall: OverallRule
     score: ScoreRules | None = None  # The 0–100 score's weights, from the [score] section.
 
 
@@ -105,7 +76,7 @@ def load_risk_rules(path: Path) -> RiskRules:
         for key, settings in raw["indicators"].items()
     }
     score = load_score_rules(raw["score"], set(indicators)) if "score" in raw else None
-    return RiskRules(indicators=indicators, overall=OverallRule(**raw["overall"]), score=score)
+    return RiskRules(indicators=indicators, score=score)
 
 
 def _parse_direction(metric_key: str, direction: str) -> bool:

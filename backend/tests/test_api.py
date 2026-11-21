@@ -59,8 +59,19 @@ def test_risk_assessment_uses_several_indicators(client):
     assert levels["interest_sensitivity_pct"] == "high"  # 12 %.
     assert levels["debt_per_sqm_total_area"] == "low"
     assert levels["land_tenure"] == "moderate"
-    assert risk["overall_level"] == "high"
+    assert "overall_level" not in risk  # The 0–100 score replaced the overall rating.
     assert risk["disclaimer"]
+
+
+def test_cooperative_list_shows_the_score(client):
+    upload(client, make_report_pdf())  # Score 47, see test_overview_has_score_with_its_explanation.
+    upload(client, make_report_pdf(name="Brf Glesa", organisation_number="769600-5678",
+                                   key_figures=[("Sparande, kr/kvm", "90", "120")]))
+    items = {item["name"]: item for item in client.get("/api/cooperatives").json()}
+    assert (items["Brf Provhuset"]["score"], items["Brf Provhuset"]["score_label"]) == (47, None)
+    assert "overall_level" not in items["Brf Provhuset"]
+    # Only savings and the calculated short-term debt share: too little for a score.
+    assert (items["Brf Glesa"]["score"], items["Brf Glesa"]["score_label"]) == (None, "Otillräcklig information")
 
 
 def test_missing_data_is_listed_not_invented(client):
@@ -226,6 +237,7 @@ def test_overview_has_score_with_its_explanation(client):
     assert score["weight_share"] == pytest.approx(0.75)
     assert score["key_figures_assessed"] == 4
     assert score["key_figures_total"] == 6
+    assert score["coverage"] == "Baserat på 4 av 6 nyckeltal (75 % av vikten)."
     parts = {p["key"]: p for p in score["parts"]}
     assert parts["debt_per_sqm_total_area"]["part_score"] == 100
     assert parts["debt_per_sqm_total_area"]["value"] == 4_000
@@ -234,7 +246,11 @@ def test_overview_has_score_with_its_explanation(client):
     assert parts["debt_per_sqm_total_area"]["fiscal_year"] == 2025
     assert parts["debt_per_sqm_total_area"]["label"] == "Skuldsättning per kvm totalyta"
     assert parts["debt_per_sqm_total_area"]["weight_reason"]
-    assert parts["debt_per_sqm_total_area"]["rule"]
+    # The scale in Swedish number format, with the unit.
+    assert parts["debt_per_sqm_total_area"]["rule"] == (
+        "100 poäng vid 5 000 kr/m² eller lägre, 0 poäng vid 10 000 kr/m² eller högre, jämnt fördelat däremellan.")
+    assert parts["savings_per_sqm"]["rule"] == (
+        "100 poäng vid 200 kr/m² eller högre, 0 poäng vid 100 kr/m² eller lägre, jämnt fördelat däremellan.")
     assert parts["savings_per_sqm"]["part_score"] == 0
     assert {m["key"]: m["reason"] for m in score["missing"]} == {
         "fee_share_of_revenue_pct": "Saknas för räkenskapsår 2025.",

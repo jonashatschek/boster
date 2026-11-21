@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api, ApiError, type ComparisonCell, type ComparisonRow, type CooperativeComparison } from '../api'
-import { ConcernBadge } from '../components/Badges'
+import { ScoreBadge } from '../components/Badges'
 import { ComparisonChart, SERIES_COLORS } from '../components/ComparisonChart'
 import { formatValue, LAND_TENURE_LABELS, STATUS_LABELS } from '../format'
 
@@ -100,7 +100,9 @@ export function ComparisonPage() {
                           </span>
                         )}
                       </span>
-                      <ConcernBadge level={cooperative.overall_level} label={`Samlat: ${cooperative.overall_label}`} />
+                      <Link to={`/foreningar/${cooperative.id}`} title="Så räknas poängen">
+                        <ScoreBadge score={cooperative.score} label={cooperative.score_label} prefix="Poäng: " />
+                      </Link>
                     </div>
                   </th>
                 ))}
