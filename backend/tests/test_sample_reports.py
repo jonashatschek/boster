@@ -75,6 +75,10 @@ EXPECTED = {
             ("short_term_interest_bearing_debt", 2025): 46_249_603,
             ("debt_per_sqm_total_area", 2021): 3_233,
             ("savings_per_sqm", 2025): 271,
+            # HSB's object table on page 3 ("Antal | Benämning | Total yta m2").
+            ("total_area", 2025): 26_370,  # "Totalt 552 objekt"; includes garage, as the report notes.
+            ("tenant_owned_area", 2025): 24_551,  # "lägenheter (upplåtna med bostadsrätt)".
+            ("commercial_area", 2025): 946,  # "lokaler (hyresrätt)".
         },
     },
     "segelflygaren_arsredovisning.pdf": {
@@ -87,6 +91,10 @@ EXPECTED = {
             ("cash", 2025): 1_199,  # HSB cooperatives hold most liquidity in an HSB account, not "kassa och bank".
             ("debt_per_sqm_total_area", 2025): 3_824,
             ("result_after_financial_items", 2021): -12_544_000,
+            # HSB's object table on page 5 ("Antal | Benämning | Total yta m2").
+            ("total_area", 2025): 38_063,  # "Totalt 619 objekt".
+            ("tenant_owned_area", 2025): 29_664,  # "lägenheter (upplåtna med bostadsrätt)".
+            ("commercial_area", 2025): 2_029,  # "lokaler (hyresrätt)".
         },
     },
     "soderbysjon_arsredovisning.pdf": {
