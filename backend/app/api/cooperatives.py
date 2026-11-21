@@ -36,6 +36,23 @@ def list_cooperatives(session: SessionDep, rules: RulesDep):
     return cooperative_service.list_cooperatives(session, rules)
 
 
+@router.delete("/cooperatives", status_code=status.HTTP_204_NO_CONTENT)
+def delete_all_cooperatives(session: SessionDep, settings: Annotated[Settings, Depends(get_settings)]):
+    """Deletes every cooperative with its documents and figures in one transaction. Apartments are kept, unlinked.
+
+    The PDF files are removed only after the commit, so a failure never leaves documents without their file.
+    """
+    cooperatives = session.scalars(select(HousingCooperative)).all()
+    files = [document_service.document_path(settings, d) for c in cooperatives for d in c.documents]
+    for cooperative in cooperatives:
+        for document in list(cooperative.documents):
+            session.delete(document)
+        session.delete(cooperative)
+    session.commit()
+    for path in files:
+        path.unlink(missing_ok=True)
+
+
 @router.get("/cooperatives/{cooperative_id}", response_model=CooperativeOverview)
 def get_cooperative(cooperative_id: int, session: SessionDep, rules: RulesDep):
     return cooperative_service.build_overview(_load(session, cooperative_id), rules)

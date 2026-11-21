@@ -409,6 +409,8 @@ export const api = {
   updateCooperative: (id: number, changes: Partial<Pick<CooperativeInfo, 'name' | 'organisation_number' | 'land_tenure'>>) =>
     request<CooperativeOverview>(`/api/cooperatives/${id}`, json('PATCH', changes)),
   deleteCooperative: (id: number) => request<void>(`/api/cooperatives/${id}`, { method: 'DELETE' }),
+  /** Every cooperative with its documents and values; apartments are kept, unlinked. */
+  deleteAllCooperatives: () => request<void>('/api/cooperatives', { method: 'DELETE' }),
   addObservation: (id: number, observation: { metric_key: string; fiscal_year: number; value: number; note?: string }) =>
     request<CooperativeOverview>(`/api/cooperatives/${id}/observations`, json('POST', observation)),
   verifyObservation: (observationId: number) =>
@@ -436,6 +438,7 @@ export const api = {
   linkPropertyCooperative: (id: number, cooperativeId: number | null) =>
     request<PropertyOverview>(`/api/properties/${id}/cooperative`, json('PUT', { cooperative_id: cooperativeId })),
   deleteProperty: (id: number) => request<void>(`/api/properties/${id}`, { method: 'DELETE' }),
+  deleteAllProperties: () => request<void>('/api/properties', { method: 'DELETE' }),
   listMetrics: () => request<MetricDefinition[]>('/api/metrics'),
   uploadDocument: async (file: File) => {
     let pages: PageText[] | null = null

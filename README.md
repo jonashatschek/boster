@@ -72,7 +72,7 @@ Each visitor's data (a SQLite database and their PDFs) is saved in their own bro
 - **Exportera** (top right) downloads everything as a zip file: the database and the PDFs.
 - **Importera** replaces everything in this browser with an exported file. Use it to move to another computer or browser, to restore a backup, or to share your analysis with someone.
 - Clearing the browser's site data deletes everything, so export now and then to keep a copy. Boster asks the browser to keep the data even when disk space runs low, but not every browser agrees.
-- Deleting a cooperative or document in the app also deletes its figures and the PDF.
+- Deleting a cooperative or document in the app also deletes its figures and the PDF. On the overview, the × on a row deletes that apartment or cooperative, and *Ta bort alla* deletes every item in that list (apartments are kept, unlinked, when their cooperative is deleted). Both ask first; nothing can be undone, so export before if you want a copy. The checkboxes only select items for comparison (*Avmarkera* unticks them).
 
 ## Publishing
 

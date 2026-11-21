@@ -753,3 +753,17 @@ button.choice {
   width: 100%;
   text-align: left;
 }
+
+/* A compact × that removes one row in a list. */
+.icon-button {
+  border: none;
+  background: none;
+  padding: 0.1rem 0.45rem;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: var(--text-muted);
+}
+
+.icon-button:hover {
+  color: var(--high);
+}

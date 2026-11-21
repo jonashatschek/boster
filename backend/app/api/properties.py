@@ -1,6 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_risk_rules, get_session
@@ -24,6 +25,14 @@ RulesDep = Annotated[RiskRules, Depends(get_risk_rules)]
 @router.get("", response_model=list[PropertyListItem])
 def list_properties(session: SessionDep, rules: RulesDep):
     return property_service.list_properties(session, rules)
+
+
+@router.delete("", status_code=status.HTTP_204_NO_CONTENT)
+def delete_all_properties(session: SessionDep):
+    """Deletes every apartment in one transaction. Cooperatives are kept."""
+    for listing in session.scalars(select(Property)).all():
+        session.delete(listing)
+    session.commit()
 
 
 @router.post("/from-text", response_model=PropertyOverview, status_code=status.HTTP_201_CREATED)

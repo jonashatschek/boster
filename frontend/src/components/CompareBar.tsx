@@ -23,7 +23,7 @@ export function CompareBar({
         {count === max && <span className="muted"> (max)</span>}
       </span>
       <span className="row">
-        <button onClick={onClear}>Rensa</button>
+        <button onClick={onClear}>Avmarkera</button>
         <button className="primary" disabled={count < 2} onClick={onCompare}>
           Jämför
         </button>
