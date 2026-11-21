@@ -174,6 +174,17 @@ def test_deleting_cooperative_removes_documents_and_files(client, tmp_path):
     assert client.get("/api/cooperatives").json() == []
 
 
+def test_deleting_all_cooperatives_removes_all_documents_and_files(client, tmp_path):
+    first = upload(client, make_report_pdf()).json()
+    second = upload(client, make_report_pdf(name="Brf Andra", organisation_number="769600-5678"), "andra.pdf").json()
+    assert len(list((tmp_path / "documents").glob("*.pdf"))) == 2
+    assert client.delete("/api/cooperatives").status_code == 204
+    for document in (first, second):
+        assert client.get(f"/api/documents/{document['id']}").status_code == 404
+    assert not list((tmp_path / "documents").glob("*.pdf"))
+    assert client.get("/api/cooperatives").json() == []
+
+
 def test_real_report_end_to_end(client):
     path = SAMPLES / "soderbysjon_arsredovisning.pdf"
     if not path.exists():

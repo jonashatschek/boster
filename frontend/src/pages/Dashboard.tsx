@@ -23,17 +23,84 @@ export function Dashboard() {
   const [selected, setSelected] = useState<number[]>([])
   const [properties, setProperties] = useState<PropertyListItem[] | null>(null)
   const [selectedProperties, setSelectedProperties] = useState<number[]>([])
+  const [propertyError, setPropertyError] = useState<string | null>(null)
 
-  useEffect(() => {
+  function loadCooperatives() {
     api
       .listCooperatives()
       .then(setCooperatives)
       .catch((caught) => setError(caught instanceof ApiError ? caught.message : 'Kunde inte hämta föreningar.'))
+  }
+
+  function loadProperties() {
     api
       .listProperties()
       .then(setProperties)
       .catch(() => setProperties([]))
+  }
+
+  useEffect(() => {
+    loadCooperatives()
+    loadProperties()
   }, [])
+
+  function propertyName(property: PropertyListItem) {
+    return property.address ?? property.title ?? 'bostaden'
+  }
+
+  async function deleteProperty(property: PropertyListItem) {
+    if (!confirm(`Ta bort ${propertyName(property)}? Det går inte att ångra.`)) return
+    try {
+      await api.deleteProperty(property.id)
+      setPropertyError(null)
+      setSelectedProperties((current) => current.filter((id) => id !== property.id))
+      loadProperties()
+    } catch (caught) {
+      setPropertyError(caught instanceof ApiError ? caught.message : 'Kunde inte ta bort bostaden.')
+    }
+  }
+
+  async function deleteAllProperties(count: number) {
+    const what = count === 1 ? '1 bostad' : `alla ${count} bostäder`
+    if (!confirm(`Ta bort ${what}? Det går inte att ångra. Exportera först om du vill spara en kopia.`)) return
+    try {
+      await api.deleteAllProperties()
+      setPropertyError(null)
+      setSelectedProperties([])
+      loadProperties()
+    } catch (caught) {
+      setPropertyError(caught instanceof ApiError ? caught.message : 'Kunde inte ta bort bostäderna.')
+    }
+  }
+
+  async function deleteCooperative(cooperative: CooperativeListItem) {
+    if (!confirm(`Ta bort ${cooperative.name} med alla dokument och värden? Det går inte att ångra.`)) return
+    try {
+      await api.deleteCooperative(cooperative.id)
+      setError(null)
+      setSelected((current) => current.filter((id) => id !== cooperative.id))
+      loadCooperatives()
+      loadProperties() // Apartments linked to it are now unlinked.
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : 'Kunde inte ta bort föreningen.')
+    }
+  }
+
+  async function deleteAllCooperatives(count: number) {
+    const what = count === 1 ? '1 förening' : `alla ${count} föreningar`
+    if (!confirm(`Ta bort ${what} med alla dokument och värden? Det går inte att ångra. Exportera först om du vill spara en kopia.`)) {
+      return
+    }
+    try {
+      await api.deleteAllCooperatives()
+      setError(null)
+      setSelected([])
+      loadCooperatives()
+      loadProperties() // Apartments are kept, now unlinked.
+    } catch (caught) {
+      setError(caught instanceof ApiError ? caught.message : 'Kunde inte ta bort föreningarna.')
+    }
+  }
 
   function onDocumentAdded(document: DocumentSummary) {
     if (document.cooperative_id) navigate(`/foreningar/${document.cooperative_id}`)
@@ -64,10 +131,18 @@ export function Dashboard() {
       <section>
         <div className="spread">
           <h2>Bostäder</h2>
-          {properties && properties.length >= 2 && (
-            <span className="small muted">Bocka i 2–{MAX_COMPARED_PROPERTIES} bostäder för att jämföra dem</span>
-          )}
+          <span className="row">
+            {properties && properties.length >= 2 && (
+              <span className="small muted">Bocka i 2–{MAX_COMPARED_PROPERTIES} bostäder för att jämföra dem</span>
+            )}
+            {properties && properties.length > 0 && (
+              <button className="danger small" onClick={() => deleteAllProperties(properties.length)}>
+                Ta bort alla
+              </button>
+            )}
+          </span>
         </div>
+        {propertyError && <div className="notice error">{propertyError}</div>}
         {properties === null && <p className="muted">Laddar …</p>}
         {properties?.length === 0 && <p className="muted">Inga bostäder ännu. Lägg till en annons ovan.</p>}
         {properties && properties.length > 0 && (
@@ -99,11 +174,14 @@ export function Dashboard() {
                     </div>
                   </div>
                 </label>
-                {property.cooperative_overall_level ? (
-                  <ConcernBadge level={property.cooperative_overall_level} label={`Förening: ${property.cooperative_overall_label}`} />
-                ) : (
-                  <span className="badge">Ingen förening kopplad</span>
-                )}
+                <span className="row">
+                  {property.cooperative_overall_level ? (
+                    <ConcernBadge level={property.cooperative_overall_level} label={`Förening: ${property.cooperative_overall_label}`} />
+                  ) : (
+                    <span className="badge">Ingen förening kopplad</span>
+                  )}
+                  <DeleteRowButton name={propertyName(property)} onClick={() => deleteProperty(property)} />
+                </span>
               </li>
             ))}
           </ul>
@@ -121,9 +199,16 @@ export function Dashboard() {
       <section>
         <div className="spread">
           <h2>Föreningar</h2>
-          {cooperatives && cooperatives.length >= 2 && (
-            <span className="small muted">Bocka i 2–{MAX_COMPARED_COOPERATIVES} föreningar för att jämföra dem</span>
-          )}
+          <span className="row">
+            {cooperatives && cooperatives.length >= 2 && (
+              <span className="small muted">Bocka i 2–{MAX_COMPARED_COOPERATIVES} föreningar för att jämföra dem</span>
+            )}
+            {cooperatives && cooperatives.length > 0 && (
+              <button className="danger small" onClick={() => deleteAllCooperatives(cooperatives.length)}>
+                Ta bort alla
+              </button>
+            )}
+          </span>
         </div>
         {error && <div className="notice error">{error}</div>}
         {cooperatives === null && !error && <p className="muted">Laddar …</p>}
@@ -151,7 +236,10 @@ export function Dashboard() {
                     </div>
                   </div>
                 </label>
-                <ConcernBadge level={cooperative.overall_level} label={cooperative.overall_label} />
+                <span className="row">
+                  <ConcernBadge level={cooperative.overall_level} label={cooperative.overall_label} />
+                  <DeleteRowButton name={cooperative.name} onClick={() => deleteCooperative(cooperative)} />
+                </span>
               </li>
             ))}
           </ul>
@@ -166,5 +254,14 @@ export function Dashboard() {
         />
       </section>
     </div>
+  )
+}
+
+/** The × that deletes one row; it asks before deleting. */
+function DeleteRowButton({ name, onClick }: { name: string; onClick: () => void }) {
+  return (
+    <button className="icon-button" onClick={onClick} title={`Ta bort ${name}`} aria-label={`Ta bort ${name}`}>
+      ×
+    </button>
   )
 }

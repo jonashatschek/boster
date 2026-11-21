@@ -181,6 +181,33 @@ def test_delete_property(client):
     assert client.get(f"/api/properties/{overview['id']}").status_code == 404
 
 
+def test_delete_all_properties_keeps_cooperatives(client):
+    cooperative_id = add_cooperative(client, name="HSB Brf Segelflygaren i Stockholm", organisation_number="716416-7939")
+    client.post("/api/properties/from-text", json={"text": HEMNET_STYLE})
+    client.post("/api/properties/from-text", json={"text": BOOLI_STYLE})
+    assert len(client.get("/api/properties").json()) == 2
+    assert client.delete("/api/properties").status_code == 204
+    assert client.get("/api/properties").json() == []
+    assert [c["id"] for c in client.get("/api/cooperatives").json()] == [cooperative_id]
+
+
+def test_delete_all_cooperatives_keeps_properties_unlinked(client):
+    add_cooperative(client, name="HSB Brf Segelflygaren i Stockholm", organisation_number="716416-7939")
+    add_cooperative(client, name="Brf Byamännen", organisation_number="769600-0001")
+    overview = client.post("/api/properties/from-text", json={"text": HEMNET_STYLE}).json()
+    assert overview["cooperative"] is not None
+    assert client.delete("/api/cooperatives").status_code == 204
+    assert client.get("/api/cooperatives").json() == []
+    overview = client.get(f"/api/properties/{overview['id']}").json()
+    assert overview["cooperative"] is None
+    assert field(overview, "asking_price")["value"] == 4_250_000
+
+
+def test_delete_all_on_empty_lists(client):
+    assert client.delete("/api/properties").status_code == 204
+    assert client.delete("/api/cooperatives").status_code == 204
+
+
 def test_list_shows_cooperative_risk(client):
     add_cooperative(client, name="Brf Segelflygaren", organisation_number="716416-7939")
     client.post("/api/properties/from-text", json={"text": HEMNET_STYLE})
