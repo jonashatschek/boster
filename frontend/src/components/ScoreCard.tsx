@@ -59,7 +59,8 @@ export function ScoreCard({ score, disclaimer }: { score: CooperativeScore; disc
                   <tr key={part.key}>
                     <td>{part.label}</td>
                     <td>
-                      {formatValue(part.value, part.unit)} <span className="muted">({part.fiscal_year})</span>
+                      {part.value_text ?? formatValue(part.value, part.unit ?? '')}
+                      {part.fiscal_year !== null && <span className="muted"> ({part.fiscal_year})</span>}
                       <div>
                         <StatusBadge status={part.status} />
                       </div>
@@ -114,6 +115,7 @@ function contribution(part: ScorePart): number {
 }
 
 function Source({ part }: { part: ScorePart }) {
+  if (part.source_text) return <span>{part.source_text}</span>
   if (part.formula) return <span className="muted">Beräknat: {part.formula}</span>
   if (part.sources.length === 0) return <span className="muted">–</span>
   return (

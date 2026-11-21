@@ -128,12 +128,18 @@ export interface CooperativeOverview {
 export interface ScorePart {
   key: string
   label: string
-  value: number
-  unit: string
-  fiscal_year: number
+  /** A key figure's value; null for the land tenure (see value_text). */
+  value: number | null
+  /** The land tenure in words ("Tomträtt", "Äganderätt"). */
+  value_text: string | null
+  unit: string | null
+  /** Null for the land tenure, which is not tied to a fiscal year. */
+  fiscal_year: number | null
   status: VerificationStatus
   /** Where a reported value was read; empty when Boster calculated it. */
   sources: SourceRef[]
+  /** The land tenure's quoted line with its page, or "Angivet manuellt.". */
+  source_text: string | null
   /** Set when Boster calculated the value. */
   formula: string | null
   rule: string

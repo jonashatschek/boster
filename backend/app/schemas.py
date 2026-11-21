@@ -119,15 +119,17 @@ class CooperativeInfo(BaseModel):
 
 
 class ScorePart(BaseModel):
-    """One key figure's contribution to the score, with what is needed to explain it."""
+    """One part's contribution to the score (a key figure, or the land tenure), with what explains it."""
 
     key: str
     label: str
-    value: float
-    unit: str
-    fiscal_year: int
+    value: float | None  # A key figure's value; None for the land tenure, see value_text.
+    value_text: str | None  # The land tenure in words ("Tomträtt", "Äganderätt").
+    unit: str | None
+    fiscal_year: int | None  # None for the land tenure, which is not tied to a fiscal year.
     status: str  # How the value was obtained (extracted, calculated, user_entered, verified).
     sources: list[SourceRef]  # Where a reported value was read (document, page, printed label).
+    source_text: str | None  # The land tenure's quoted line with its page, or "Angivet manuellt.".
     formula: str | None  # Set instead when Boster calculated the value.
     rule: str  # The gradual scale in words.
     part_score: float  # 0–100.

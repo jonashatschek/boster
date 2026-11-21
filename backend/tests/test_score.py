@@ -145,3 +145,54 @@ def test_scale_rule_uses_swedish_numbers_and_units():
         "100 poäng vid 2 ggr eller högre, 0 poäng vid 1,2 ggr eller lägre, jämnt fördelat däremellan.")
     assert _scale_rule(loaded, "interest_sensitivity_pct") == (
         "100 poäng vid 5 % eller lägre, 0 poäng vid 10 % eller högre, jämnt fördelat däremellan.")
+
+
+# Land tenure as a part (#44): owned 100, leasehold 0, unknown missing. Its weight counts in the total and the
+# weight share, but not toward the minimum number of key figures.
+def rules_with_land(weights, land_weight=10, **kwargs):
+    from app.domain.score import LandTenureRule
+
+    base = rules(weights, **kwargs)
+    return RiskRules(base.indicators, ScoreRules(base.score.weights, base.score.min_key_figures,
+                                                 base.score.min_weight_share,
+                                                 LandTenureRule(land_weight, "reason", owned=100, leasehold=0)))
+
+
+KEY_FIGURES = {"debt_per_sqm_total_area": 6_000, "savings_per_sqm": 150, "interest_sensitivity_pct": 3,
+               "interest_coverage_ratio": 1.0}  # Part scores 80, 50, 100, 0 with weights 40, 30, 20, 10: 67.
+
+
+@pytest.mark.parametrize(("tenure", "expected", "land_score"), [
+    # (3200 + 1500 + 2000 + 0 + 100·10) / 110 = 70.0 → 70.
+    ("owned", 70, 100),
+    # (3200 + 1500 + 2000 + 0 + 0·10) / 110 = 60.9 → 61.
+    ("leasehold", 61, 0),
+])
+def test_land_tenure_is_a_part_of_the_score(tenure, expected, land_score):
+    result = compute_score(KEY_FIGURES, rules_with_land(WEIGHTS), land_tenure=tenure)
+    assert result.score == expected
+    land = next(p for p in result.parts if p.metric_key == "land_tenure")
+    assert (land.value, land.part_score, land.weight) == (tenure, land_score, 10)
+    assert land.effective_weight == pytest.approx(10 / 110)
+    assert result.weight_share == 1
+
+
+def test_unknown_land_tenure_is_a_missing_part():
+    result = compute_score(KEY_FIGURES, rules_with_land(WEIGHTS), land_tenure=None)
+    assert result.score == 67  # Exactly as without land tenure: missing counts neither as good nor as bad.
+    assert result.missing == ["land_tenure"]
+    assert result.weight_share == pytest.approx(100 / 110)
+
+
+def test_land_tenure_does_not_count_as_a_key_figure():
+    # Two key figures plus known land tenure: still too few key figures for a score, although 80 % of the weight.
+    result = compute_score({"debt_per_sqm_total_area": 6_000, "savings_per_sqm": 150},
+                           rules_with_land(WEIGHTS), land_tenure="owned")
+    assert result.score is None
+    assert result.weight_share == pytest.approx(80 / 110)
+
+
+def test_shipped_configuration_has_a_land_tenure_part():
+    land = load_risk_rules(CONFIG_PATH).score.land_tenure
+    assert (land.weight, land.owned, land.leasehold) == (10, 100, 0)
+    assert land.reason

@@ -17,7 +17,7 @@ from app.domain.metrics import METRICS
 from app.domain.provenance import ExtractionMethod, ValueOrigin, VerificationStatus
 from app.domain.resolution import Observation, ResolvedValue, resolve
 from app.domain.risk import CONCERN_LABELS, ConcernLevel, RiskRules
-from app.domain.score import compute_score
+from app.domain.score import LAND_TENURE_PART, compute_score
 from app.models import FinancialObservation, HousingCooperative, SourceDocument
 from app.schemas import (
     CalculatedValue, Completeness, CooperativeInfo, CooperativeListItem, CooperativeOverview, CooperativeScore,
@@ -83,10 +83,11 @@ def score_label(score: CooperativeScore | None) -> str | None:
     return score.label if score else None
 
 
-def coverage_text(assessed: int, total: int, weight_share: float) -> str:
-    """"Baserat på 4 av 6 nyckeltal (75 % av vikten)." Built here only, so every page says the same."""
+def coverage_text(assessed: int, total: int, weight_share: float, land_tenure_known: bool = False) -> str:
+    """"Baserat på 4 av 6 nyckeltal och marken (77 % av vikten)." Built here only, so every page says the same."""
     share = math.floor(weight_share * 100 + 0.5)
-    return f"Baserat på {assessed} av {total} nyckeltal ({share} % av vikten)."
+    land = " och marken" if land_tenure_known else ""
+    return f"Baserat på {assessed} av {total} nyckeltal{land} ({share} % av vikten)."
 
 
 def build_overview(cooperative: HousingCooperative, rules: RiskRules) -> CooperativeOverview:
@@ -109,7 +110,7 @@ def build_overview(cooperative: HousingCooperative, rules: RiskRules) -> Coopera
         latest_fiscal_year=latest_year,
         metrics=metrics,
         risk=_assess_risk(cooperative, metrics, latest_year, rules),
-        score=_score(metrics, latest_year, rules),
+        score=_score(cooperative, metrics, latest_year, rules),
         completeness=_completeness(metrics, latest_year),
         documents=[DocumentSummary.model_validate(d) for d in
                    sorted(cooperative.documents, key=lambda d: (d.reporting_year or 0, d.id), reverse=True)],
@@ -244,19 +245,20 @@ def _latest_fiscal_year(cooperative: HousingCooperative, years: list[int]) -> in
     return years[0] if years else None
 
 
-def _score(metrics: list[MetricSeries], year: int | None, rules: RiskRules) -> CooperativeScore | None:
-    """The 0–100 score from the same latest-year values the risk indicators use."""
+def _score(cooperative: HousingCooperative, metrics: list[MetricSeries], year: int | None,
+           rules: RiskRules) -> CooperativeScore | None:
+    """The 0–100 score from the same latest-year values the risk indicators use, and the land tenure."""
     if rules.score is None:
         return None
     year_values = {key: _year_value_of(metrics, key, year) for key in rules.score.weights}
     # A conflicting value is never scored, also when it is still displayed (reported vs. calculated).
     usable = {key: v.display_value if v and v.display_status != VerificationStatus.CONFLICTING.value else None
               for key, v in year_values.items()}
-    result = compute_score(usable, rules)
+    result = compute_score(usable, rules, land_tenure=cooperative.land_tenure)
     parts = [
-        ScorePart(
-            key=part.metric_key, label=METRICS[part.metric_key].label, value=part.value,
-            unit=METRICS[part.metric_key].unit.value, fiscal_year=year,
+        _land_tenure_part(cooperative, part, rules) if part.metric_key == LAND_TENURE_PART else ScorePart(
+            key=part.metric_key, label=METRICS[part.metric_key].label, value=part.value, value_text=None,
+            unit=METRICS[part.metric_key].unit.value, fiscal_year=year, source_text=None,
             status=year_values[part.metric_key].display_status, rule=_scale_rule(rules, part.metric_key),
             part_score=part.part_score, weight=part.weight,
             weight_reason=rules.score.weights[part.metric_key].reason, effective_weight=part.effective_weight,
@@ -265,16 +267,39 @@ def _score(metrics: list[MetricSeries], year: int | None, rules: RiskRules) -> C
         for part in result.parts
     ]
     missing = [
+        ScoreMissingPart(key=key, label="Mark", reason="Okänt om föreningen äger marken eller har tomträtt.")
+        if key == LAND_TENURE_PART else
         ScoreMissingPart(key=key, label=METRICS[key].label, reason=_missing_part_reason(year_values[key], year))
         for key in result.missing
     ]
+    key_figures = sum(1 for part in parts if part.key != LAND_TENURE_PART)
     insufficient = CONCERN_LABELS[ConcernLevel.INSUFFICIENT_INFORMATION]
     return CooperativeScore(
         score=result.score, label=None if result.score is not None else insufficient,
-        rule=rules.score.describe(), weight_share=result.weight_share, key_figures_assessed=len(parts),
+        rule=rules.score.describe(), weight_share=result.weight_share, key_figures_assessed=key_figures,
         key_figures_total=len(rules.score.weights),
-        coverage=coverage_text(len(parts), len(rules.score.weights), result.weight_share),
+        coverage=coverage_text(key_figures, len(rules.score.weights), result.weight_share,
+                               land_tenure_known=LAND_TENURE_PART not in result.missing
+                               and rules.score.land_tenure is not None),
         parts=parts, missing=missing,
+    )
+
+
+LAND_TENURE_TEXT = {"owned": "Äganderätt", "leasehold": "Tomträtt"}
+MANUAL_LAND_TENURE = "Angivet manuellt."
+
+
+def _land_tenure_part(cooperative: HousingCooperative, part, rules: RiskRules) -> ScorePart:
+    """The land tenure part, sourced from the report's statement or marked as entered by the user."""
+    land = rules.score.land_tenure
+    by_user = cooperative.land_tenure_source == MANUAL_LAND_TENURE
+    return ScorePart(
+        key=LAND_TENURE_PART, label="Mark", value=None, value_text=LAND_TENURE_TEXT[cooperative.land_tenure],
+        unit=None, fiscal_year=None,
+        status=VerificationStatus.USER_ENTERED.value if by_user else VerificationStatus.EXTRACTED.value,
+        sources=[], source_text=cooperative.land_tenure_source, formula=None, rule=land.describe(),
+        part_score=part.part_score, weight=part.weight, weight_reason=land.reason,
+        effective_weight=part.effective_weight,
     )
 
 
