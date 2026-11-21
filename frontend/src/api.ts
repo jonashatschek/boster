@@ -121,9 +121,43 @@ export interface CooperativeOverview {
   latest_fiscal_year: number | null
   metrics: MetricSeries[]
   risk: RiskAssessment
+  /** The 0–100 score with its explanation; null when the rules have no score section. */
+  score: CooperativeScore | null
   completeness: { fiscal_year: number | null; available: string[]; missing: string[] }
   documents: DocumentSummary[]
   findings: Finding[]
+}
+
+export interface ScorePart {
+  key: string
+  label: string
+  value: number
+  unit: string
+  fiscal_year: number
+  status: VerificationStatus
+  /** Where a reported value was read; empty when Boster calculated it. */
+  sources: SourceRef[]
+  /** Set when Boster calculated the value. */
+  formula: string | null
+  rule: string
+  part_score: number
+  weight: number
+  weight_reason: string
+  effective_weight: number
+}
+
+/** Always shown together with its explanation; never a credit rating. */
+export interface CooperativeScore {
+  /** Null below the minimum coverage. */
+  score: number | null
+  /** "Otillräcklig information" when there is no score. */
+  label: string | null
+  rule: string
+  weight_share: number
+  key_figures_assessed: number
+  key_figures_total: number
+  parts: ScorePart[]
+  missing: { key: string; label: string; reason: string }[]
 }
 
 export interface CooperativeListItem {

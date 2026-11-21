@@ -214,3 +214,90 @@ def test_startup_adds_columns_missing_from_an_older_database(tmp_path):
     with sqlite3.connect(database) as connection:
         columns = {row[1] for row in connection.execute("PRAGMA table_info(properties)")}
     assert {"fee_changes", "address", "asking_price"} <= columns
+
+
+def test_overview_has_score_with_its_explanation(client):
+    # Default report: debt 4 000 kr/m² (part 100, weight 25), savings 90 kr/m² (0, 20), interest
+    # sensitivity 12 % (0, 20), short-term debt 0 % (100, 10); fee share and interest coverage missing.
+    # (100·25 + 0·20 + 0·20 + 100·10) / 75 = 46.7 → 47, with 75 % of the weight.
+    cooperative_id = upload(client, make_report_pdf()).json()["cooperative_id"]
+    score = client.get(f"/api/cooperatives/{cooperative_id}").json()["score"]
+    assert score["score"] == 47
+    assert score["weight_share"] == pytest.approx(0.75)
+    assert score["key_figures_assessed"] == 4
+    assert score["key_figures_total"] == 6
+    parts = {p["key"]: p for p in score["parts"]}
+    assert parts["debt_per_sqm_total_area"]["part_score"] == 100
+    assert parts["debt_per_sqm_total_area"]["value"] == 4_000
+    assert parts["debt_per_sqm_total_area"]["weight"] == 25
+    assert parts["debt_per_sqm_total_area"]["effective_weight"] == pytest.approx(25 / 75)
+    assert parts["debt_per_sqm_total_area"]["fiscal_year"] == 2025
+    assert parts["debt_per_sqm_total_area"]["label"] == "Skuldsättning per kvm totalyta"
+    assert parts["debt_per_sqm_total_area"]["weight_reason"]
+    assert parts["debt_per_sqm_total_area"]["rule"]
+    assert parts["savings_per_sqm"]["part_score"] == 0
+    assert {m["key"]: m["reason"] for m in score["missing"]} == {
+        "fee_share_of_revenue_pct": "Saknas för räkenskapsår 2025.",
+        "interest_coverage_ratio": "Saknas för räkenskapsår 2025.",
+    }
+    assert score["rule"]
+
+
+def test_conflicting_key_figure_is_a_missing_part_of_the_score(client):
+    # Two reports for the same year disagree on the debt per m², so it is left out of the score.
+    first = upload(client, make_report_pdf()).json()
+    upload(client, make_report_pdf(key_figures=[("Skuldsättning, kr/kvm", "4 600", "4 200"),
+                                                ("Sparande, kr/kvm", "90", "120"),
+                                                ("Räntekänslighet, %", "12", "11")]), "andra.pdf")
+    score = client.get(f"/api/cooperatives/{first['cooperative_id']}").json()["score"]
+    assert "debt_per_sqm_total_area" not in {p["key"] for p in score["parts"]}
+    assert {m["key"]: m["reason"] for m in score["missing"]}["debt_per_sqm_total_area"] == (
+        "Motstridiga uppgifter för räkenskapsår 2025.")
+
+
+# Expected scores worked out by hand from the printed key figures, the rules and the weights in
+# config/risk_rules.toml (weights: debt 25, sensitivity 20, savings 20, coverage 15, fee share 10, short-term 10).
+SAMPLE_SCORES = {
+    # Debt 1 443 → 100; sensitivity 2 % → 100; savings 151 → (151-100)/(200-100) = 51; interest coverage
+    # 1.52 → (1.52-1.2)/(2-1.2) ≈ 40; short-term debt 100 % → 0; fee share missing (weight 90 of 100).
+    # (2500 + 2000 + 1020 + 603 + 0) / 90 = 68.0 → 68.
+    "702002-3532_arsredovisning.pdf": 68,
+    # Savings 122 → 22, everything else 100: (2500 + 2000 + 440 + 1500 + 1000 + 1000) / 100 = 84.4 → 84.
+    "byamannen2_arsredovisning_2025.pdf": 84,
+    # Short-term debt 33.3 % → (60-33.3)/(60-30) ≈ 89, everything else 100: (9000 + 891) / 100 = 98.9 → 99.
+    "segelflygaren_arsredovisning.pdf": 99,
+}
+
+
+@pytest.mark.parametrize(("filename", "expected"), SAMPLE_SCORES.items())
+def test_score_of_real_reports(client, filename, expected):
+    path = SAMPLES / filename
+    if not path.exists():
+        pytest.skip("Sample document not downloaded")
+    cooperative_id = upload(client, path.read_bytes(), path.name).json()["cooperative_id"]
+    assert client.get(f"/api/cooperatives/{cooperative_id}").json()["score"]["score"] == expected
+
+
+def test_value_that_disagrees_with_our_calculation_is_a_missing_part(client):
+    # A manual total area of 5 000 m² gives a calculated debt per m² of 8 000, which disagrees with the
+    # printed 4 000: the value stays visible but is "conflicting", so the score leaves it out.
+    # Remaining: savings 0 (20), sensitivity 0 (20), short-term debt 100 (10): 1000 / 50 = 20, at 50 % of the weight.
+    cooperative_id = upload(client, make_report_pdf()).json()["cooperative_id"]
+    client.post(f"/api/cooperatives/{cooperative_id}/observations",
+                json={"metric_key": "total_area", "fiscal_year": 2025, "value": 5_000})
+    score = client.get(f"/api/cooperatives/{cooperative_id}").json()["score"]
+    assert "debt_per_sqm_total_area" not in {p["key"] for p in score["parts"]}
+    assert {m["key"]: m["reason"] for m in score["missing"]}["debt_per_sqm_total_area"] == (
+        "Motstridiga uppgifter för räkenskapsår 2025.")
+    assert score["score"] == 20
+
+
+def test_score_parts_carry_their_sources(client):
+    cooperative_id = upload(client, make_report_pdf()).json()["cooperative_id"]
+    parts = {p["key"]: p for p in client.get(f"/api/cooperatives/{cooperative_id}").json()["score"]["parts"]}
+    debt = parts["debt_per_sqm_total_area"]  # Printed in the report's key figures.
+    assert debt["sources"] and debt["sources"][0]["page"] and debt["sources"][0]["printed_label"]
+    assert debt["formula"] is None
+    short_term = parts["short_term_debt_share_pct"]  # Calculated by Boster from two balance sheet rows.
+    assert short_term["sources"] == []
+    assert short_term["formula"]

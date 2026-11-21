@@ -121,12 +121,50 @@ class CooperativeInfo(BaseModel):
     updated_at: datetime
 
 
+class ScorePart(BaseModel):
+    """One key figure's contribution to the score, with what is needed to explain it."""
+
+    key: str
+    label: str
+    value: float
+    unit: str
+    fiscal_year: int
+    status: str  # How the value was obtained (extracted, calculated, user_entered, verified).
+    sources: list[SourceRef]  # Where a reported value was read (document, page, printed label).
+    formula: str | None  # Set instead when Boster calculated the value.
+    rule: str  # The gradual scale in words.
+    part_score: float  # 0–100.
+    weight: float  # As configured.
+    weight_reason: str
+    effective_weight: float  # Share among the parts that have a value; they sum to 1.
+
+
+class ScoreMissingPart(BaseModel):
+    key: str
+    label: str
+    reason: str
+
+
+class CooperativeScore(BaseModel):
+    """The 0–100 score, always together with its explanation. Not a credit rating."""
+
+    score: int | None  # None below the minimum coverage ("Otillräcklig information").
+    label: str | None  # "Otillräcklig information" when there is no score.
+    rule: str
+    weight_share: float  # Share of the total weight carried by the parts that have a value.
+    key_figures_assessed: int
+    key_figures_total: int
+    parts: list[ScorePart]
+    missing: list[ScoreMissingPart]
+
+
 class CooperativeOverview(BaseModel):
     cooperative: CooperativeInfo
     fiscal_years: list[int]
     latest_fiscal_year: int | None
     metrics: list[MetricSeries]
     risk: RiskAssessment
+    score: CooperativeScore | None  # None when the rules have no [score] section.
     completeness: Completeness
     documents: list[DocumentSummary]
     findings: list[Finding]

@@ -16,10 +16,12 @@ from app.domain.metrics import METRICS
 from app.domain.provenance import ExtractionMethod, ValueOrigin, VerificationStatus
 from app.domain.resolution import Observation, ResolvedValue, resolve
 from app.domain.risk import CONCERN_LABELS, ConcernLevel, RiskRules
+from app.domain.score import compute_score
 from app.models import FinancialObservation, HousingCooperative, SourceDocument
 from app.schemas import (
-    CalculatedValue, Completeness, CooperativeInfo, CooperativeListItem, CooperativeOverview, DocumentSummary,
-    Finding, MetricSeries, ReportedValue, RiskAssessment, RiskIndicator, SourceRef, YearValue,
+    CalculatedValue, Completeness, CooperativeInfo, CooperativeListItem, CooperativeOverview, CooperativeScore,
+    DocumentSummary, Finding, MetricSeries, ReportedValue, RiskAssessment, RiskIndicator, ScoreMissingPart,
+    ScorePart, SourceRef, YearValue,
 )
 
 # The figures a buyer most needs. Used for the completeness indicator.
@@ -92,6 +94,7 @@ def build_overview(cooperative: HousingCooperative, rules: RiskRules) -> Coopera
         latest_fiscal_year=latest_year,
         metrics=metrics,
         risk=_assess_risk(cooperative, metrics, latest_year, rules),
+        score=_score(metrics, latest_year, rules),
         completeness=_completeness(metrics, latest_year),
         documents=[DocumentSummary.model_validate(d) for d in
                    sorted(cooperative.documents, key=lambda d: (d.reporting_year or 0, d.id), reverse=True)],
@@ -226,13 +229,69 @@ def _latest_fiscal_year(cooperative: HousingCooperative, years: list[int]) -> in
     return years[0] if years else None
 
 
+def _score(metrics: list[MetricSeries], year: int | None, rules: RiskRules) -> CooperativeScore | None:
+    """The 0–100 score from the same latest-year values the risk indicators use."""
+    if rules.score is None:
+        return None
+    year_values = {key: _year_value_of(metrics, key, year) for key in rules.score.weights}
+    # A conflicting value is never scored, also when it is still displayed (reported vs. calculated).
+    usable = {key: v.display_value if v and v.display_status != VerificationStatus.CONFLICTING.value else None
+              for key, v in year_values.items()}
+    result = compute_score(usable, rules)
+    parts = [
+        ScorePart(
+            key=part.metric_key, label=METRICS[part.metric_key].label, value=part.value,
+            unit=METRICS[part.metric_key].unit.value, fiscal_year=year,
+            status=year_values[part.metric_key].display_status, rule=_scale_rule(rules, part.metric_key),
+            part_score=part.part_score, weight=part.weight,
+            weight_reason=rules.score.weights[part.metric_key].reason, effective_weight=part.effective_weight,
+            **_part_provenance(year_values[part.metric_key]),
+        )
+        for part in result.parts
+    ]
+    missing = [
+        ScoreMissingPart(key=key, label=METRICS[key].label, reason=_missing_part_reason(year_values[key], year))
+        for key in result.missing
+    ]
+    insufficient = CONCERN_LABELS[ConcernLevel.INSUFFICIENT_INFORMATION]
+    return CooperativeScore(
+        score=result.score, label=None if result.score is not None else insufficient,
+        rule=rules.score.describe(), weight_share=result.weight_share, key_figures_assessed=len(parts),
+        key_figures_total=len(rules.score.weights), parts=parts, missing=missing,
+    )
+
+
+def _part_provenance(year_value: YearValue) -> dict:
+    """Where a scored value comes from: the report's observations, or our formula when we calculated it."""
+    if year_value.display_origin == ValueOrigin.CALCULATED.value and year_value.calculated is not None:
+        return {"sources": [], "formula": year_value.calculated.formula}
+    return {"sources": year_value.reported.sources if year_value.reported else [], "formula": None}
+
+
+def _scale_rule(rules: RiskRules, metric_key: str) -> str:
+    rule = rules.indicators[metric_key]
+    good, bad = f"{rule.low_concern_until:g}", f"{rule.high_concern_from:g}"
+    if rule.higher_is_worse:
+        return f"100 poäng vid {good} eller lägre, 0 poäng vid {bad} eller högre, jämnt fördelat däremellan."
+    return f"100 poäng vid {good} eller högre, 0 poäng vid {bad} eller lägre, jämnt fördelat däremellan."
+
+
+def _missing_part_reason(year_value: YearValue | None, year: int | None) -> str:
+    if year is None:
+        return "Inget räkenskapsår att bedöma."
+    if year_value is not None and year_value.display_status == VerificationStatus.CONFLICTING.value:
+        return f"Motstridiga uppgifter för räkenskapsår {year}."
+    return f"Saknas för räkenskapsår {year}."
+
+
+def _year_value_of(metrics: list[MetricSeries], metric_key: str, year: int | None) -> YearValue | None:
+    series = next((s for s in metrics if s.key == metric_key), None)
+    return next((v for v in series.values if v.fiscal_year == year), None) if series else None
+
+
 def _display_value(metrics: list[MetricSeries], metric_key: str, year: int | None) -> float | None:
-    for series in metrics:
-        if series.key == metric_key:
-            for value in series.values:
-                if value.fiscal_year == year:
-                    return value.display_value
-    return None
+    year_value = _year_value_of(metrics, metric_key, year)
+    return year_value.display_value if year_value else None
 
 
 def _assess_risk(cooperative: HousingCooperative, metrics: list[MetricSeries], year: int | None,
