@@ -56,7 +56,8 @@ rationale = "En stor andel lån som ska omförhandlas inom ett år ger kortsikti
 [score]
 # No score unless at least this many key figures have a value ...
 min_key_figures = 3
-# ... and together carry at least this share of the total weight.
+# ... and, with the land tenure, carry at least this share of their weight. The trends
+# are not counted here: they add to the score when available, but never block it.
 min_weight_share = 0.5
 
 [score.weights.debt_per_sqm_total_area]
@@ -91,3 +92,25 @@ weight = 10
 owned = 100
 leasehold = 0
 reason = "Med tomträtt betalar föreningen en avgäld som omförhandlas med jämna mellanrum och kan höjas kraftigt."
+
+# Trends over time as parts of the score: the change per year from the first to the
+# last of the latest `years` fiscal years; every one of those years needs a figure.
+# measure "percent_per_year" (percent of the first value) or "change_per_year" (in the
+# figure's own unit, for figures that can be negative such as savings). 100 points at
+# `best` or better, 0 at `worst` or worse, linear in between. They count in the weight,
+# but not toward min_key_figures or min_weight_share.
+[score.trends.debt_per_sqm_total_area]
+measure = "percent_per_year"
+best = -5
+worst = 5
+years = 3
+weight = 10
+reason = "Stigande skuldsättning per kvm de senaste åren tyder på nya lån, ofta för underhåll som inte sparats ihop till."
+
+[score.trends.savings_per_sqm]
+measure = "change_per_year"
+best = 20
+worst = -20
+years = 3
+weight = 10
+reason = "Ett sparande som minskar år för år ger mindre utrymme för framtida underhåll."

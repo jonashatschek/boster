@@ -11,7 +11,7 @@ The score summarises documented rules of thumb. It is not a credit rating.
 """
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # Imported for type hints only; risk.py imports this module.
@@ -45,17 +45,64 @@ class LandTenureRule:
                 f"Okänt räknas inte.")
 
 
+TREND_PREFIX = "trend:"
+TREND_MEASURES = ("percent_per_year", "change_per_year")
+
+
+@dataclass(frozen=True)
+class TrendRule:
+    """A key figure's development over its latest `years` fiscal years, as a part of the score.
+
+    The change per year runs from the first to the last of those years: in percent of the first value
+    ("percent_per_year"), or in the figure's own unit ("change_per_year", for figures that can be negative,
+    such as savings). It gets 100 points at `best` or better, 0 at `worst` or worse, linear in between.
+    """
+
+    metric_key: str
+    measure: str
+    best: float
+    worst: float
+    years: int
+    weight: float
+    reason: str
+
+    @property
+    def key(self) -> str:
+        return f"{TREND_PREFIX}{self.metric_key}"
+
+    def change(self, values: list[float]) -> float | None:
+        """The change per year over `values` (oldest first, one per year, no gaps); None if not defined."""
+        first, last, span = values[0], values[-1], len(values) - 1
+        if self.measure == "percent_per_year":
+            if first <= 0:
+                return None  # A percentage of zero or a negative start means nothing.
+            return 100 * (last - first) / first / span
+        return (last - first) / span
+
+    def part_score(self, change: float) -> float:
+        # Multiply before dividing, as for the key figures, so round steps come out exact.
+        return min(100.0, max(0.0, 100 * (self.worst - change) / (self.worst - self.best)))
+
+    def describe(self, unit: str) -> str:
+        shown = "%" if self.measure == "percent_per_year" else unit
+        return (f"Förändring per år över de {self.years} senaste åren: 100 poäng vid {_number(self.best)} {shown} "
+                f"per år, 0 poäng vid {_number(self.worst)} {shown} per år, jämnt fördelat däremellan. Alla "
+                f"{self.years} år behövs.")
+
+
 @dataclass(frozen=True)
 class ScoreRules:
     weights: dict[str, ScoreWeight]  # The rule-rated key figures.
     min_key_figures: int  # At least this many key figures must have a value (land tenure does not count).
-    min_weight_share: float  # ... and all parts with a value together carry at least this share of the weight.
+    min_weight_share: float  # ... and with the land tenure carry this share of their weight (trends not counted).
     land_tenure: LandTenureRule | None = None
+    trends: dict[str, TrendRule] = field(default_factory=dict)  # By part key, "trend:<metric>".
 
     def describe(self) -> str:
         return (f"Viktat medelvärde av delarna som har ett värde. Saknade delar räknas inte, och de övriga "
-                f"väger då tyngre. Poäng ges bara om minst {self.min_key_figures} nyckeltal finns och de "
-                f"tillsammans väger minst {self.min_weight_share * 100:.0f} % av den totala vikten.")
+                f"väger då tyngre. Poäng ges bara om minst {self.min_key_figures} nyckeltal finns och nyckeltalen "
+                f"och marken som finns tillsammans väger minst {self.min_weight_share * 100:.0f} % av sin vikt. "
+                f"Trenderna räknas med när de finns, men avgör inte om poäng ges.")
 
 
 @dataclass(frozen=True)
@@ -73,6 +120,7 @@ class ScoreResult:
     parts: list[ScoredPart]  # In the configured order.
     missing: list[str]  # Metric keys without a value, in the configured order.
     weight_share: float  # Share of the total configured weight that the parts with a value carry.
+    core_weight_share: float = 0.0  # The same over key figures and land tenure only: what the minimum uses.
 
 
 def part_score(rule: "IndicatorRule", value: float) -> float:
@@ -82,10 +130,12 @@ def part_score(rule: "IndicatorRule", value: float) -> float:
     return min(100.0, max(0.0, 100 * (bad - value) / (bad - good)))
 
 
-def compute_score(values: dict[str, float | None], rules: "RiskRules", land_tenure: str | None = None) -> ScoreResult:
+def compute_score(values: dict[str, float | None], rules: "RiskRules", land_tenure: str | None = None,
+                  trends: dict[str, float | None] | None = None) -> ScoreResult:
     """`values` holds each key figure's value for the compared year; None (or absent) means missing.
 
-    `land_tenure` ("owned", "leasehold" or None for unknown) is a part when the rules have a land tenure rule.
+    `trends` holds each trend's change per year by part key (None means missing), and `land_tenure`
+    ("owned", "leasehold" or None for unknown) is a part when the rules have a land tenure rule.
     """
     score_rules, land = rules.score, rules.score.land_tenure
     # (key, value, part score, weight) for every configured part; part score None means missing.
@@ -94,6 +144,9 @@ def compute_score(values: dict[str, float | None], rules: "RiskRules", land_tenu
          weight.weight)
         for key, weight in score_rules.weights.items()
     ]
+    for key, trend in score_rules.trends.items():
+        change = (trends or {}).get(key)
+        candidates.append((key, change, trend.part_score(change) if change is not None else None, trend.weight))
     if land is not None:
         candidates.append((LAND_TENURE_PART, land_tenure, land.part_score(land_tenure), land.weight))
 
@@ -105,9 +158,14 @@ def compute_score(values: dict[str, float | None], rules: "RiskRules", land_tenu
     weight_share = present_weight / total_weight if total_weight else 0.0
 
     key_figures = sum(1 for part in parts if part.metric_key in score_rules.weights)
-    enough = key_figures >= score_rules.min_key_figures and weight_share >= score_rules.min_weight_share - 1e-9
+    # The minimum is about enough current data: it counts the key figures and the land tenure, not the trends, so a
+    # missing history (e.g. only one report uploaded) adds nothing but never blocks a score.
+    core = [c for c in candidates if not c[0].startswith(TREND_PREFIX)]
+    core_total = sum(weight for *_, weight in core)
+    core_share = sum(weight for _, _, score, weight in core if score is not None) / core_total if core_total else 0.0
+    enough = key_figures >= score_rules.min_key_figures and core_share >= score_rules.min_weight_share - 1e-9
     score = _round_half_up(sum(p.part_score * p.effective_weight for p in parts)) if enough and parts else None
-    return ScoreResult(score, parts, missing, weight_share)
+    return ScoreResult(score, parts, missing, weight_share, core_share)
 
 
 def load_score_rules(raw: dict, indicator_keys: set[str]) -> ScoreRules:
@@ -126,7 +184,22 @@ def load_score_rules(raw: dict, indicator_keys: set[str]) -> ScoreRules:
                               float(settings["leasehold"]))
         if land.weight <= 0:
             raise ValueError(f"Score weight for land tenure must be positive, got {land.weight:g}")
-    return ScoreRules(weights, int(raw["min_key_figures"]), float(raw["min_weight_share"]), land)
+    trends = {}
+    for metric_key, settings in raw.get("trends", {}).items():
+        if metric_key not in indicator_keys:
+            raise ValueError(f"Score trend for {metric_key}, which has no indicator rule")
+        trend = TrendRule(metric_key, settings["measure"], float(settings["best"]), float(settings["worst"]),
+                          int(settings["years"]), float(settings["weight"]), settings["reason"])
+        if trend.measure not in TREND_MEASURES or trend.years < 2 or trend.weight <= 0 or trend.best == trend.worst:
+            raise ValueError(f"Invalid score trend for {metric_key}")
+        trends[trend.key] = trend
+    return ScoreRules(weights, int(raw["min_key_figures"]), float(raw["min_weight_share"]), land, trends)
+
+
+def _number(value: float) -> str:
+    """Swedish format for a rule limit: "−5", "20", "1,5"."""
+    text = f"{value:g}".replace(".", ",")
+    return text.replace("-", "−") if value < 0 else text
 
 
 def _round_half_up(value: float) -> int:

@@ -118,6 +118,16 @@ class CooperativeInfo(BaseModel):
     updated_at: datetime
 
 
+class TrendInput(BaseModel):
+    """One year of a trend, with where its value comes from."""
+
+    fiscal_year: int
+    value: float
+    status: str  # extracted, calculated, user_entered or verified.
+    sources: list[SourceRef]  # The observations behind the value used (not values it replaced).
+    formula: str | None  # Set instead when Boster calculated the value.
+
+
 class ScorePart(BaseModel):
     """One part's contribution to the score (a key figure, or the land tenure), with what explains it."""
 
@@ -131,6 +141,7 @@ class ScorePart(BaseModel):
     sources: list[SourceRef]  # Where a reported value was read (document, page, printed label).
     source_text: str | None  # The land tenure's quoted line with its page, or "Angivet manuellt.".
     formula: str | None  # Set instead when Boster calculated the value.
+    inputs: list[TrendInput] = []  # For a trend: the years and values it used, oldest first.
     rule: str  # The gradual scale in words.
     part_score: float  # 0–100.
     weight: float  # As configured.
