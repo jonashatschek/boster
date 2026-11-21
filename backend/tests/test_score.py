@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from app.domain.risk import IndicatorRule, OverallRule, RiskRules, load_risk_rules
+from app.domain.risk import IndicatorRule, RiskRules, load_risk_rules
 from app.domain.score import ScoreRules, ScoreWeight, compute_score, part_score
 
 CONFIG_PATH = Path(__file__).parents[1] / "config" / "risk_rules.toml"
@@ -13,12 +13,11 @@ DEBT = IndicatorRule("debt_per_sqm_total_area", True, 5_000, 10_000, "")
 SAVINGS = IndicatorRule("savings_per_sqm", False, 200, 100, "")
 SENSITIVITY = IndicatorRule("interest_sensitivity_pct", True, 5, 10, "")
 COVERAGE = IndicatorRule("interest_coverage_ratio", False, 2, 1.2, "")
-OVERALL = OverallRule(3, 2, 2, 2)
 
 
 def rules(weights, min_key_figures=3, min_weight_share=0.5):
     indicators = {rule.metric_key: rule for rule in (DEBT, SAVINGS, SENSITIVITY, COVERAGE)}
-    return RiskRules(indicators, OVERALL, ScoreRules(
+    return RiskRules(indicators, ScoreRules(
         {key: ScoreWeight(key, weight, "") for key, weight in weights.items()}, min_key_figures, min_weight_share))
 
 
@@ -136,3 +135,13 @@ def test_negative_weight_is_rejected(tmp_path):
                                         "[score.weights.savings_per_sqm]\nweight = -1\nreason = \"x\"\n")
     with pytest.raises(ValueError, match="savings_per_sqm"):
         load_risk_rules(path)
+
+
+def test_scale_rule_uses_swedish_numbers_and_units():
+    from app.services.cooperatives import _scale_rule
+
+    loaded = load_risk_rules(CONFIG_PATH)
+    assert _scale_rule(loaded, "interest_coverage_ratio") == (
+        "100 poäng vid 2 ggr eller högre, 0 poäng vid 1,2 ggr eller lägre, jämnt fördelat däremellan.")
+    assert _scale_rule(loaded, "interest_sensitivity_pct") == (
+        "100 poäng vid 5 % eller lägre, 0 poäng vid 10 % eller högre, jämnt fördelat däremellan.")

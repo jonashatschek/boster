@@ -9,7 +9,7 @@ import {
   type PropertyFieldValue,
   type PropertyOverview,
 } from '../api'
-import { ConcernBadge, StatusBadge } from '../components/Badges'
+import { ConcernBadge, ScoreBadge, StatusBadge } from '../components/Badges'
 import { DocumentUploader } from '../components/DocumentUploader'
 import { ListingDescription } from '../components/ListingDescription'
 import { TransportSection } from '../components/TransportSection'
@@ -420,7 +420,7 @@ function CooperativeSection({
       <section className="card stack">
         <div className="spread">
           <h2>Föreningen</h2>
-          <ConcernBadge level={linked.overall_level} label={`Samlat: ${linked.overall_label}`} />
+          <ScoreBadge score={linked.score} label={linked.score_label} prefix="Poäng: " />
         </div>
         <div>
           <Link to={`/foreningar/${linked.id}`}>

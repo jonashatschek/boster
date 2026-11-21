@@ -358,11 +358,52 @@ button:disabled {
 
 /* Risk */
 
-.risk-overall {
+/* The 0–100 score: neutral on purpose, it is a summary and not a verdict or credit rating. */
+.badge.score {
+  font-variant-numeric: tabular-nums;
+}
+
+.score-card {
+  margin: 0.75rem 0 1.25rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-muted);
+}
+
+.score-summary {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  align-items: baseline;
   gap: 0.75rem;
+}
+
+.score-value {
+  font-size: 1.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.score-value.insufficient {
+  font-size: 1.15rem;
+}
+
+.score-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.5rem;
+}
+
+.score-table th,
+.score-table td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.35rem 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.score-table .num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .risk-grid {

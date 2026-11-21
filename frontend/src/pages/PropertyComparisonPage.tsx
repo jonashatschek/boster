@@ -126,6 +126,11 @@ export function PropertyComparisonPage() {
                             ) : (
                               <CellValue row={row} cell={cell} />
                             )}
+                            {row.key === 'cooperative_score' && properties[index].cooperative_id !== null && (
+                              <div className="small">
+                                <Link to={`/foreningar/${properties[index].cooperative_id}`}>Så räknas poängen</Link>
+                              </div>
+                            )}
                           </td>
                         ))}
                       </tr>

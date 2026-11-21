@@ -16,7 +16,9 @@ from app.models import HousingCooperative, Property
 from app.schemas import (
     CooperativeListItem, DerivedValue, LinkedCooperative, PropertyField, PropertyListItem, PropertyOverview,
 )
-from app.services.cooperatives import CORE_METRICS, build_overview, list_cooperatives, load_cooperative
+from app.services.cooperatives import (
+    CORE_METRICS, build_overview, list_cooperatives, load_cooperative, score_label, score_value,
+)
 from app.services.transport import transport_info
 
 
@@ -232,8 +234,8 @@ def list_properties(session: Session, rules: RiskRules) -> list[PropertyListItem
             asking_price=listing.asking_price, living_area=listing.living_area, rooms=listing.rooms,
             monthly_fee=listing.monthly_fee, cooperative_id=cooperative_id,
             cooperative_name=overview.cooperative.name if overview else listing.cooperative_name,
-            cooperative_overall_level=overview.risk.overall_level if overview else None,
-            cooperative_overall_label=overview.risk.overall_label if overview else None,
+            cooperative_score=score_value(overview.score) if overview else None,
+            cooperative_score_label=score_label(overview.score) if overview else None,
             retrieval_status=listing.retrieval_status, updated_at=listing.updated_at,
         ))
     return items
@@ -249,8 +251,8 @@ def build_property_overview(session: Session, listing: Property, rules: RiskRule
             linked = LinkedCooperative(
                 id=cooperative.id, name=cooperative.name, organisation_number=cooperative.organisation_number,
                 fiscal_year=cooperative_overview.latest_fiscal_year,
-                overall_level=cooperative_overview.risk.overall_level,
-                overall_label=cooperative_overview.risk.overall_label, land_tenure=cooperative.land_tenure,
+                score=score_value(cooperative_overview.score), score_label=score_label(cooperative_overview.score),
+                land_tenure=cooperative.land_tenure,
                 indicators=cooperative_overview.risk.indicators,
                 completeness_available=len(cooperative_overview.completeness.available),
                 completeness_total=len(CORE_METRICS),
