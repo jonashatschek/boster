@@ -1,8 +1,9 @@
 # Rules for the descriptive concern levels shown on the cooperative page.
 #
 # These are rules of thumb commonly used when Swedish buyers review a housing
-# cooperative (bostadsrättsförening). They are NOT a credit rating, and a single
-# indicator never decides the overall assessment on its own. Adjust freely.
+# cooperative (bostadsrättsförening). They are NOT a credit rating. The overall
+# summary is the 0–100 score below, a weighted average of several indicators, so a
+# single indicator never decides it on its own. Adjust freely.
 #
 # For each indicator:
 #   direction          "higher_is_worse" or "lower_is_worse"
@@ -46,16 +47,6 @@ direction = "higher_is_worse"
 low_concern_until = 30
 high_concern_from = 60
 rationale = "En stor andel lån som ska omförhandlas inom ett år ger kortsiktig exponering mot nya räntenivåer."
-
-[overall]
-# At least this many indicators must have a value, otherwise the overall result
-# is "Otillräcklig information".
-min_assessed_indicators = 3
-# Overall "Hög risk" requires several warning signs, never just one.
-high_when_high_count_at_least = 2
-high_when_one_high_and_moderate_count_at_least = 2
-# Overall "Måttlig risk" when there is one high or this many moderate indicators.
-moderate_when_moderate_count_at_least = 2
 
 # The 0–100 score: a weighted average of the indicators' part scores. Each part score is
 # 100 on the good side of low_concern_until, 0 at or beyond high_concern_from, and linear

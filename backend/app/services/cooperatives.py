@@ -5,6 +5,7 @@ resolved base figures, compare reported key figures with our own calculations,
 and assess the latest year against the configured risk rules.
 """
 
+import math
 from collections import defaultdict
 from dataclasses import dataclass
 
@@ -68,10 +69,24 @@ def list_cooperatives(session: Session, rules: RiskRules) -> list[CooperativeLis
         items.append(CooperativeListItem(
             id=cooperative.id, name=cooperative.name, organisation_number=cooperative.organisation_number,
             latest_fiscal_year=overview.latest_fiscal_year, document_count=len(cooperative.documents),
-            overall_level=overview.risk.overall_level, overall_label=overview.risk.overall_label,
+            score=score_value(overview.score), score_label=score_label(overview.score),
             updated_at=cooperative.updated_at,
         ))
     return items
+
+
+def score_value(score: CooperativeScore | None) -> int | None:
+    return score.score if score else None
+
+
+def score_label(score: CooperativeScore | None) -> str | None:
+    return score.label if score else None
+
+
+def coverage_text(assessed: int, total: int, weight_share: float) -> str:
+    """"Baserat på 4 av 6 nyckeltal (75 % av vikten)." Built here only, so every page says the same."""
+    share = math.floor(weight_share * 100 + 0.5)
+    return f"Baserat på {assessed} av {total} nyckeltal ({share} % av vikten)."
 
 
 def build_overview(cooperative: HousingCooperative, rules: RiskRules) -> CooperativeOverview:
@@ -257,7 +272,9 @@ def _score(metrics: list[MetricSeries], year: int | None, rules: RiskRules) -> C
     return CooperativeScore(
         score=result.score, label=None if result.score is not None else insufficient,
         rule=rules.score.describe(), weight_share=result.weight_share, key_figures_assessed=len(parts),
-        key_figures_total=len(rules.score.weights), parts=parts, missing=missing,
+        key_figures_total=len(rules.score.weights),
+        coverage=coverage_text(len(parts), len(rules.score.weights), result.weight_share),
+        parts=parts, missing=missing,
     )
 
 
@@ -270,10 +287,21 @@ def _part_provenance(year_value: YearValue) -> dict:
 
 def _scale_rule(rules: RiskRules, metric_key: str) -> str:
     rule = rules.indicators[metric_key]
-    good, bad = f"{rule.low_concern_until:g}", f"{rule.high_concern_from:g}"
+    unit = METRICS[metric_key].unit.value
+    good, bad = _limit_text(rule.low_concern_until, unit), _limit_text(rule.high_concern_from, unit)
     if rule.higher_is_worse:
         return f"100 poäng vid {good} eller lägre, 0 poäng vid {bad} eller högre, jämnt fördelat däremellan."
     return f"100 poäng vid {good} eller högre, 0 poäng vid {bad} eller lägre, jämnt fördelat däremellan."
+
+
+# Units as the page shows values (frontend formatValue), so a threshold reads like the value next to it.
+_SHOWN_UNITS = {"kr/kvm": "kr/m²", "kvm": "m²"}
+
+
+def _limit_text(value: float, unit: str) -> str:
+    """A threshold in Swedish format: "5 000 kr/m²", "1,2 ggr", "5 %"."""
+    number = f"{value:,.0f}".replace(",", " ") if value == int(value) else f"{value:g}".replace(".", ",")
+    return f"{number} {_SHOWN_UNITS.get(unit, unit)}"
 
 
 def _missing_part_reason(year_value: YearValue | None, year: int | None) -> str:
@@ -306,12 +334,7 @@ def _assess_risk(cooperative: HousingCooperative, metrics: list[MetricSeries], y
             rule=rule.describe(),
         ))
     indicators.append(_land_tenure_indicator(cooperative))
-
-    overall = rules.overall.assess([ConcernLevel(i.level) for i in indicators])
-    return RiskAssessment(
-        fiscal_year=year, overall_level=overall.value, overall_label=CONCERN_LABELS[overall],
-        overall_rule=rules.overall.describe(), indicators=indicators, disclaimer=DISCLAIMER,
-    )
+    return RiskAssessment(fiscal_year=year, indicators=indicators, disclaimer=DISCLAIMER)
 
 
 def _land_tenure_indicator(cooperative: HousingCooperative) -> RiskIndicator:

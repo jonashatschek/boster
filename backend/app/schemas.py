@@ -71,9 +71,6 @@ class RiskIndicator(BaseModel):
 
 class RiskAssessment(BaseModel):
     fiscal_year: int | None
-    overall_level: str
-    overall_label: str
-    overall_rule: str
     indicators: list[RiskIndicator]
     disclaimer: str
 
@@ -154,6 +151,7 @@ class CooperativeScore(BaseModel):
     weight_share: float  # Share of the total weight carried by the parts that have a value.
     key_figures_assessed: int
     key_figures_total: int
+    coverage: str  # "Baserat på 4 av 6 nyckeltal (75 % av vikten)."
     parts: list[ScorePart]
     missing: list[ScoreMissingPart]
 
@@ -176,8 +174,8 @@ class CooperativeListItem(BaseModel):
     organisation_number: str | None
     latest_fiscal_year: int | None
     document_count: int
-    overall_level: str
-    overall_label: str
+    score: int | None  # The 0–100 score; None below the minimum coverage.
+    score_label: str | None  # "Otillräcklig information" when there is no score.
     updated_at: datetime
 
 
@@ -214,8 +212,8 @@ class ComparedCooperative(BaseModel):
     land_tenure: str | None
     fiscal_year: int | None  # The latest fiscal year, used for the comparison.
     period_months: int | None  # Length of that fiscal year, when known.
-    overall_level: str
-    overall_label: str
+    score: int | None  # The 0–100 score; None below the minimum coverage.
+    score_label: str | None  # "Otillräcklig information" when there is no score.
     completeness_available: int
     completeness_total: int
 
@@ -285,8 +283,8 @@ class LinkedCooperative(BaseModel):
     name: str
     organisation_number: str | None
     fiscal_year: int | None
-    overall_level: str
-    overall_label: str
+    score: int | None  # The 0–100 score; None below the minimum coverage.
+    score_label: str | None  # "Otillräcklig information" when there is no score.
     land_tenure: str | None
     indicators: list[RiskIndicator]
     completeness_available: int
@@ -382,8 +380,8 @@ class PropertyListItem(BaseModel):
     monthly_fee: float | None
     cooperative_id: int | None
     cooperative_name: str | None
-    cooperative_overall_level: str | None
-    cooperative_overall_label: str | None
+    cooperative_score: int | None  # The linked cooperative's 0–100 score.
+    cooperative_score_label: str | None  # "Otillräcklig information" when it has no score; None when unlinked.
     retrieval_status: str
     updated_at: datetime
 
@@ -456,8 +454,8 @@ class ComparedProperty(BaseModel):
     cooperative_id: int | None
     cooperative_name: str | None  # The linked cooperative's name, else the name in the listing.
     fiscal_year: int | None  # The linked cooperative's latest fiscal year.
-    overall_level: str | None
-    overall_label: str | None
+    cooperative_score: int | None  # The linked cooperative's 0–100 score.
+    cooperative_score_label: str | None  # "Otillräcklig information" when it has no score; None when unlinked.
     maintenance: list[Finding]  # Quoted report passages on renovations, loans and fees.
 
 

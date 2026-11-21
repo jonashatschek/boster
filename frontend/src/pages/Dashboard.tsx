@@ -9,7 +9,7 @@ import {
   type DocumentSummary,
   type PropertyListItem,
 } from '../api'
-import { ConcernBadge } from '../components/Badges'
+import { ScoreBadge } from '../components/Badges'
 import { CompareBar } from '../components/CompareBar'
 import { DocumentUploader } from '../components/DocumentUploader'
 import { ListingImporter } from '../components/ListingImporter'
@@ -175,8 +175,8 @@ export function Dashboard() {
                   </div>
                 </label>
                 <span className="row">
-                  {property.cooperative_overall_level ? (
-                    <ConcernBadge level={property.cooperative_overall_level} label={`Förening: ${property.cooperative_overall_label}`} />
+                  {property.cooperative_score !== null || property.cooperative_score_label ? (
+                    <ScoreBadge score={property.cooperative_score} label={property.cooperative_score_label} prefix="Förening: " />
                   ) : (
                     <span className="badge">Ingen förening kopplad</span>
                   )}
@@ -237,7 +237,7 @@ export function Dashboard() {
                   </div>
                 </label>
                 <span className="row">
-                  <ConcernBadge level={cooperative.overall_level} label={cooperative.overall_label} />
+                  <ScoreBadge score={cooperative.score} label={cooperative.score_label} />
                   <DeleteRowButton name={cooperative.name} onClick={() => deleteCooperative(cooperative)} />
                 </span>
               </li>

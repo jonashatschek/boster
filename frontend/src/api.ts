@@ -75,9 +75,6 @@ export interface RiskIndicator {
 
 export interface RiskAssessment {
   fiscal_year: number | null
-  overall_level: ConcernLevel
-  overall_label: string
-  overall_rule: string
   indicators: RiskIndicator[]
   disclaimer: string
 }
@@ -156,6 +153,8 @@ export interface CooperativeScore {
   weight_share: number
   key_figures_assessed: number
   key_figures_total: number
+  /** "Baserat på 4 av 6 nyckeltal (75 % av vikten)." */
+  coverage: string
   parts: ScorePart[]
   missing: { key: string; label: string; reason: string }[]
 }
@@ -166,8 +165,10 @@ export interface CooperativeListItem {
   organisation_number: string | null
   latest_fiscal_year: number | null
   document_count: number
-  overall_level: ConcernLevel
-  overall_label: string
+  /** The 0–100 score; null below the minimum coverage. */
+  score: number | null
+  /** "Otillräcklig information" when there is no score. */
+  score_label: string | null
   updated_at: string
 }
 
@@ -187,8 +188,10 @@ export interface ComparedCooperative {
   land_tenure: 'owned' | 'leasehold' | null
   fiscal_year: number | null
   period_months: number | null
-  overall_level: ConcernLevel
-  overall_label: string
+  /** The 0–100 score; null below the minimum coverage. */
+  score: number | null
+  /** "Otillräcklig information" when there is no score. */
+  score_label: string | null
   completeness_available: number
   completeness_total: number
 }
@@ -263,8 +266,9 @@ export interface ComparedProperty {
   cooperative_id: number | null
   cooperative_name: string | null
   fiscal_year: number | null
-  overall_level: ConcernLevel | null
-  overall_label: string | null
+  /** The linked cooperative's 0–100 score; null when unlinked or below the minimum coverage. */
+  cooperative_score: number | null
+  cooperative_score_label: string | null
   maintenance: Finding[]
 }
 
@@ -304,8 +308,10 @@ export interface LinkedCooperative {
   name: string
   organisation_number: string | null
   fiscal_year: number | null
-  overall_level: ConcernLevel
-  overall_label: string
+  /** The 0–100 score; null below the minimum coverage. */
+  score: number | null
+  /** "Otillräcklig information" when there is no score. */
+  score_label: string | null
   land_tenure: 'owned' | 'leasehold' | null
   indicators: RiskIndicator[]
   completeness_available: number
@@ -397,8 +403,9 @@ export interface PropertyListItem {
   monthly_fee: number | null
   cooperative_id: number | null
   cooperative_name: string | null
-  cooperative_overall_level: ConcernLevel | null
-  cooperative_overall_label: string | null
+  /** The linked cooperative's 0–100 score; null when unlinked or below the minimum coverage. */
+  cooperative_score: number | null
+  cooperative_score_label: string | null
   retrieval_status: string
   updated_at: string
 }

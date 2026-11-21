@@ -15,7 +15,9 @@ from app.models import HousingCooperative
 from app.schemas import (
     ComparedCooperative, ComparisonCell, ComparisonRow, CooperativeComparison, CooperativeOverview, HistoryPoint,
 )
-from app.services.cooperatives import CORE_METRICS, YearCalculations, build_overview, calculations_for_year
+from app.services.cooperatives import (
+    CORE_METRICS, YearCalculations, build_overview, calculations_for_year, score_label, score_value,
+)
 
 MIN_COOPERATIVES = 2
 MAX_COOPERATIVES = 4
@@ -58,7 +60,7 @@ def _compared_cooperative(overview: CooperativeOverview) -> ComparedCooperative:
         organisation_number=overview.cooperative.organisation_number,
         land_tenure=overview.cooperative.land_tenure, fiscal_year=year,
         period_months=_period_months(overview, year),
-        overall_level=overview.risk.overall_level, overall_label=overview.risk.overall_label,
+        score=score_value(overview.score), score_label=score_label(overview.score),
         completeness_available=len(overview.completeness.available), completeness_total=len(CORE_METRICS),
     )
 
