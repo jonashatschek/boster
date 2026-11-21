@@ -281,6 +281,8 @@ These categories must be supported by documented rules and evidence. They must n
 
 Avoid relying on a single KPI to determine the overall assessment.
 
+A cooperative may also get a score from 0 to 100 (decided by the owner in #11). It is the weighted average of part scores computed in code from documented, configurable rules, and it is only ever shown together with its full breakdown: each part's value, source, rule, part score and weight, and which parts are missing and why. A missing part is left out and the remaining weights are scaled up; no value is invented for it. Below a minimum coverage there is no score. The score must not replace the explanation of the financial risks, and must not be presented as an objective credit rating.
+
 Where possible, distinguish between:
 
 - Actual historical financial performance
@@ -368,7 +370,7 @@ Examples:
 
 Every chart must include meaningful labels, units, and reporting periods.
 
-Do not use a single opaque numerical score as a substitute for explaining financial risks.
+Never show a numerical score without its explanation, and never use it as a substitute for explaining financial risks (see the 0–100 score under the risk categories above).
 
 ### FR-14: Save and manage analyses
 

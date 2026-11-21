@@ -56,3 +56,38 @@ high_when_high_count_at_least = 2
 high_when_one_high_and_moderate_count_at_least = 2
 # Overall "Måttlig risk" when there is one high or this many moderate indicators.
 moderate_when_moderate_count_at_least = 2
+
+# The 0–100 score: a weighted average of the indicators' part scores. Each part score is
+# 100 on the good side of low_concern_until, 0 at or beyond high_concern_from, and linear
+# in between. A missing part is left out and the others weigh more; the page always says
+# what was included and what was missing. Weights are relative: only their proportions
+# matter. The score is always shown with its explanation and is not a credit rating.
+[score]
+# No score unless at least this many key figures have a value ...
+min_key_figures = 3
+# ... and together carry at least this share of the total weight.
+min_weight_share = 0.5
+
+[score.weights.debt_per_sqm_total_area]
+weight = 25
+reason = "Belåningen är den största drivaren av framtida avgifter och ränterisk."
+
+[score.weights.interest_sensitivity_pct]
+weight = 20
+reason = "Visar direkt hur mycket avgiften måste höjas om räntan stiger."
+
+[score.weights.savings_per_sqm]
+weight = 20
+reason = "Sparandet avgör om underhåll kan betalas utan avgiftshöjningar eller nya lån."
+
+[score.weights.interest_coverage_ratio]
+weight = 15
+reason = "Marginalen mellan driftöverskott och räntekostnader."
+
+[score.weights.fee_share_of_revenue_pct]
+weight = 10
+reason = "En låg andel avgiftsintäkter gör föreningen beroende av hyresintäkter som kan försvinna."
+
+[score.weights.short_term_debt_share_pct]
+weight = 10
+reason = "Lån som förfaller inom ett år ger kortsiktig exponering mot nya räntor."

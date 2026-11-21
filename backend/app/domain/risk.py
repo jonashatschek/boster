@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
 
+from app.domain.score import ScoreRules, load_score_rules
+
 
 class ConcernLevel(StrEnum):
     LOW = "low"
@@ -86,6 +88,7 @@ class OverallRule:
 class RiskRules:
     indicators: dict[str, IndicatorRule]
     overall: OverallRule
+    score: ScoreRules | None = None  # The 0–100 score's weights, from the [score] section.
 
 
 def load_risk_rules(path: Path) -> RiskRules:
@@ -101,7 +104,8 @@ def load_risk_rules(path: Path) -> RiskRules:
         )
         for key, settings in raw["indicators"].items()
     }
-    return RiskRules(indicators=indicators, overall=OverallRule(**raw["overall"]))
+    score = load_score_rules(raw["score"], set(indicators)) if "score" in raw else None
+    return RiskRules(indicators=indicators, overall=OverallRule(**raw["overall"]), score=score)
 
 
 def _parse_direction(metric_key: str, direction: str) -> bool:
