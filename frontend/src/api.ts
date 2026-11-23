@@ -120,9 +120,23 @@ export interface CooperativeOverview {
   risk: RiskAssessment
   /** The 0–100 score with its explanation; null when the rules have no score section. */
   score: CooperativeScore | null
+  /** Maintenance questions for the user, with the current answers. */
+  maintenance: MaintenanceQuestion[]
   completeness: { fiscal_year: number | null; available: string[]; missing: string[] }
   documents: DocumentSummary[]
   findings: Finding[]
+}
+
+export type MaintenanceAnswer = 'yes' | 'no' | 'unknown'
+
+export interface MaintenanceQuestion {
+  name: string
+  label: string
+  /** The topic of the report passages (overview.findings) shown as evidence. */
+  topic: string
+  question: string
+  answer: MaintenanceAnswer | null
+  answered_at: string | null
 }
 
 export interface ScorePart {
@@ -466,6 +480,8 @@ export const api = {
   deleteCooperative: (id: number) => request<void>(`/api/cooperatives/${id}`, { method: 'DELETE' }),
   /** Every cooperative with its documents and values; apartments are kept, unlinked. */
   deleteAllCooperatives: () => request<void>('/api/cooperatives', { method: 'DELETE' }),
+  answerMaintenance: (id: number, name: string, answer: MaintenanceAnswer) =>
+    request<CooperativeOverview>(`/api/cooperatives/${id}/maintenance/${name}`, json('PUT', { answer })),
   addObservation: (id: number, observation: { metric_key: string; fiscal_year: number; value: number; note?: string }) =>
     request<CooperativeOverview>(`/api/cooperatives/${id}/observations`, json('POST', observation)),
   verifyObservation: (observationId: number) =>

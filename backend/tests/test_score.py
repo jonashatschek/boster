@@ -305,3 +305,39 @@ def test_core_weight_share_is_the_share_the_minimum_uses():
                            RiskRules(base.indicators, score_rules), land_tenure="owned", trends={})
     assert result.core_weight_share == pytest.approx(100 / 110)  # Key figures 90 + land 10 of 100 + 10.
     assert result.weight_share == pytest.approx(100 / 130)  # All weight, including the missing trend.
+
+
+# Maintenance confirmed by the user (#46): per topic "coming up within five years?" Ja → 0, Nej → 100,
+# Vet inte or no answer → missing. Counts in the score, not in the minimum coverage.
+def _stambyte():
+    from app.domain.score import MaintenanceRule
+
+    return MaintenanceRule("stambyte", "Stambyte", "Stambyte", "Står föreningen inför stambyte de närmaste fem åren?",
+                           yes=0, no=100, weight=5, reason="")
+
+
+@pytest.mark.parametrize(("answer", "expected"), [("yes", 0), ("no", 100), ("unknown", None), (None, None)])
+def test_maintenance_answer_part_score(answer, expected):
+    assert _stambyte().part_score(answer) == expected
+
+
+def test_maintenance_answer_is_a_part_that_does_not_count_toward_the_minimum():
+    base = rules(WEIGHTS)
+    rule = _stambyte()
+    score_rules = ScoreRules(base.score.weights, 3, 0.5, None, {}, {rule.key: rule})
+    # Key figures as before (6700 over weight 100) plus Ja (0 points, weight 5): 6700 / 105 = 63.8 → 64.
+    result = compute_score(KEY_FIGURES, RiskRules(base.indicators, score_rules), maintenance={rule.key: "yes"})
+    assert result.score == 64
+    part = next(p for p in result.parts if p.metric_key == "maintenance:stambyte")
+    assert (part.value, part.part_score, part.weight) == ("yes", 0, 5)
+    unanswered = compute_score(KEY_FIGURES, RiskRules(base.indicators, score_rules), maintenance={})
+    assert unanswered.score == 67 and unanswered.missing == ["maintenance:stambyte"]
+    assert unanswered.core_weight_share == 1  # The missing answer does not lower the minimum's share.
+
+
+def test_shipped_configuration_asks_about_stambyte_tak_and_fasad():
+    maintenance = load_risk_rules(CONFIG_PATH).score.maintenance
+    assert list(maintenance) == ["maintenance:stambyte", "maintenance:tak", "maintenance:fasad"]
+    assert all((m.yes, m.no, m.weight) == (0, 100, 5) and m.question.endswith("de närmaste fem åren?") and m.reason
+               for m in maintenance.values())
+    assert [m.topic for m in maintenance.values()] == ["Stambyte", "Tak", "Fasad"]  # The report passages' topics.

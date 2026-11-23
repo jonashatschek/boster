@@ -169,6 +169,21 @@ class CooperativeScore(BaseModel):
     missing: list[ScoreMissingPart]
 
 
+class MaintenanceQuestion(BaseModel):
+    """A maintenance question for the user, with the current answer (None when unanswered)."""
+
+    name: str
+    label: str
+    topic: str  # The topic of the report passages (overview.findings) shown as evidence.
+    question: str
+    answer: str | None  # "yes", "no", "unknown" or None.
+    answered_at: datetime | None
+
+
+class MaintenanceAnswerIn(BaseModel):
+    answer: str = Field(pattern=r"^(yes|no|unknown)$")
+
+
 class CooperativeOverview(BaseModel):
     cooperative: CooperativeInfo
     fiscal_years: list[int]
@@ -176,6 +191,7 @@ class CooperativeOverview(BaseModel):
     metrics: list[MetricSeries]
     risk: RiskAssessment
     score: CooperativeScore | None  # None when the rules have no [score] section.
+    maintenance: list[MaintenanceQuestion] = []
     completeness: Completeness
     documents: list[DocumentSummary]
     findings: list[Finding]

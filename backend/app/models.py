@@ -35,6 +35,27 @@ class HousingCooperative(Base):
     observations: Mapped[list["FinancialObservation"]] = relationship(
         back_populates="cooperative", cascade="all, delete-orphan"
     )
+    maintenance_answers: Mapped[list["MaintenanceAnswer"]] = relationship(
+        back_populates="cooperative", cascade="all, delete-orphan"
+    )
+
+
+class MaintenanceAnswer(Base):
+    """The user's answer to a maintenance question ("coming up within five years?").
+
+    Entered by the user only, never by extraction, so re-analysing a report never touches it.
+    """
+
+    __tablename__ = "maintenance_answers"
+    __table_args__ = (UniqueConstraint("cooperative_id", "name"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    cooperative_id: Mapped[int] = mapped_column(ForeignKey("housing_cooperatives.id", ondelete="CASCADE"))
+    name: Mapped[str] = mapped_column(String(40))  # The question's name in risk_rules.toml, e.g. "stambyte".
+    answer: Mapped[str] = mapped_column(String(10))  # "yes", "no" or "unknown".
+    answered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+    cooperative: Mapped[HousingCooperative] = relationship(back_populates="maintenance_answers")
 
 
 class SourceDocument(Base):

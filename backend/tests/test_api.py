@@ -235,11 +235,12 @@ def test_overview_has_score_with_its_explanation(client):
     cooperative_id = upload(client, make_report_pdf()).json()["cooperative_id"]
     score = client.get(f"/api/cooperatives/{cooperative_id}").json()["score"]
     assert score["score"] == 41
-    assert score["weight_share"] == pytest.approx(85 / 130)
+    assert score["weight_share"] == pytest.approx(85 / 145)  # Of all weight, incl. trends and maintenance.
     assert score["key_figures_assessed"] == 4
     assert score["key_figures_total"] == 6
     # The percentage is the one the minimum uses: key figures and land, 85 of 110.
-    assert score["coverage"] == "Baserat på 4 av 6 nyckeltal och marken (77 % av vikten) och 0 av 2 trender."
+    assert score["coverage"] == (
+        "Baserat på 4 av 6 nyckeltal och marken (77 % av vikten), 0 av 2 trender och 0 av 3 underhållssvar.")
     parts = {p["key"]: p for p in score["parts"]}
     assert parts["debt_per_sqm_total_area"]["part_score"] == 100
     assert parts["debt_per_sqm_total_area"]["value"] == 4_000
@@ -259,6 +260,9 @@ def test_overview_has_score_with_its_explanation(client):
         "interest_coverage_ratio": "Saknas för räkenskapsår 2025.",
         "trend:debt_per_sqm_total_area": "Saknas för räkenskapsår 2023.",  # One report: only 2024 and 2025.
         "trend:savings_per_sqm": "Saknas för räkenskapsår 2023.",
+        "maintenance:stambyte": "Inte besvarat.",
+        "maintenance:tak": "Inte besvarat.",
+        "maintenance:fasad": "Inte besvarat.",
     }
     assert score["rule"]
 
@@ -363,7 +367,8 @@ def test_unknown_land_tenure_is_a_missing_part_of_the_score(client):
     assert {m["key"]: m["reason"] for m in score["missing"]}["land_tenure"] == (
         "Okänt om föreningen äger marken eller har tomträtt.")
     assert score["score"] == 47  # As without land tenure: (2500 + 1000) / 75.
-    assert score["coverage"] == "Baserat på 4 av 6 nyckeltal (68 % av vikten) och 0 av 2 trender."  # 75 of 110.
+    assert score["coverage"] == (  # 75 of 110.
+        "Baserat på 4 av 6 nyckeltal (68 % av vikten), 0 av 2 trender och 0 av 3 underhållssvar.")
 
 
 def _three_years(client, printed_debt=True):

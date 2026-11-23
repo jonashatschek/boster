@@ -114,3 +114,36 @@ worst = -20
 years = 3
 weight = 10
 reason = "Ett sparande som minskar år för år ger mindre utrymme för framtida underhåll."
+
+# Maintenance questions the user answers on the cooperative page, as parts of the score.
+# Boster finds report passages about each topic but cannot tell reliably whether the work
+# is done or planned, so only the user's answer counts: Ja (coming up within five years)
+# and Nej get fixed part scores; Vet inte or no answer is a missing part. `topic` is the
+# topic of the report passages shown as evidence. They count in the weight, but not toward
+# min_key_figures or min_weight_share.
+[score.maintenance.stambyte]
+label = "Stambyte"
+topic = "Stambyte"
+question = "Står föreningen inför stambyte de närmaste fem åren?"
+yes = 0
+no = 100
+weight = 5
+reason = "Ett stambyte är ofta föreningens största enskilda kostnad och leder ofta till nya lån eller höjd avgift."
+
+[score.maintenance.tak]
+label = "Takrenovering"
+topic = "Tak"
+question = "Står föreningen inför takrenovering de närmaste fem åren?"
+yes = 0
+no = 100
+weight = 5
+reason = "En takrenovering är en stor kostnad som kan kräva nya lån eller höjd avgift."
+
+[score.maintenance.fasad]
+label = "Fasadrenovering"
+topic = "Fasad"
+question = "Står föreningen inför fasadrenovering de närmaste fem åren?"
+yes = 0
+no = 100
+weight = 5
+reason = "En fasadrenovering är en stor kostnad som kan kräva nya lån eller höjd avgift."
