@@ -90,6 +90,39 @@ class TrendRule:
                 f"{self.years} år behövs.")
 
 
+MAINTENANCE_PREFIX = "maintenance:"
+MAINTENANCE_ANSWERS = ("yes", "no", "unknown")
+
+
+@dataclass(frozen=True)
+class MaintenanceRule:
+    """A maintenance question the user answers ("coming up within five years?"), as a part of the score.
+
+    Boster finds report passages about the topic but cannot tell reliably whether the work is done or planned,
+    so only the user's answer counts: "yes" and "no" get fixed part scores, "unknown" or no answer is missing.
+    """
+
+    name: str  # "stambyte"
+    label: str  # "Stambyte"
+    topic: str  # The topic of the report passages shown as evidence ("Stambyte").
+    question: str
+    yes: float
+    no: float
+    weight: float
+    reason: str
+
+    @property
+    def key(self) -> str:
+        return f"{MAINTENANCE_PREFIX}{self.name}"
+
+    def part_score(self, answer: str | None) -> float | None:
+        return {"yes": self.yes, "no": self.no}.get(answer or "")
+
+    def describe(self) -> str:
+        return (f"Ja ({self.label.lower()} de närmaste fem åren) ger {self.yes:g} poäng, Nej ger {self.no:g} poäng. "
+                f"Vet inte eller inget svar räknas inte.")
+
+
 @dataclass(frozen=True)
 class ScoreRules:
     weights: dict[str, ScoreWeight]  # The rule-rated key figures.
@@ -97,12 +130,13 @@ class ScoreRules:
     min_weight_share: float  # ... and with the land tenure carry this share of their weight (trends not counted).
     land_tenure: LandTenureRule | None = None
     trends: dict[str, TrendRule] = field(default_factory=dict)  # By part key, "trend:<metric>".
+    maintenance: dict[str, MaintenanceRule] = field(default_factory=dict)  # By part key, "maintenance:<name>".
 
     def describe(self) -> str:
         return (f"Viktat medelvärde av delarna som har ett värde. Saknade delar räknas inte, och de övriga "
                 f"väger då tyngre. Poäng ges bara om minst {self.min_key_figures} nyckeltal finns och nyckeltalen "
                 f"och marken som finns tillsammans väger minst {self.min_weight_share * 100:.0f} % av sin vikt. "
-                f"Trenderna räknas med när de finns, men avgör inte om poäng ges.")
+                f"Trenderna och dina svar om underhåll räknas med när de finns, men avgör inte om poäng ges.")
 
 
 @dataclass(frozen=True)
@@ -131,7 +165,8 @@ def part_score(rule: "IndicatorRule", value: float) -> float:
 
 
 def compute_score(values: dict[str, float | None], rules: "RiskRules", land_tenure: str | None = None,
-                  trends: dict[str, float | None] | None = None) -> ScoreResult:
+                  trends: dict[str, float | None] | None = None,
+                  maintenance: dict[str, str | None] | None = None) -> ScoreResult:
     """`values` holds each key figure's value for the compared year; None (or absent) means missing.
 
     `trends` holds each trend's change per year by part key (None means missing), and `land_tenure`
@@ -147,6 +182,9 @@ def compute_score(values: dict[str, float | None], rules: "RiskRules", land_tenu
     for key, trend in score_rules.trends.items():
         change = (trends or {}).get(key)
         candidates.append((key, change, trend.part_score(change) if change is not None else None, trend.weight))
+    for key, question in score_rules.maintenance.items():
+        answer = (maintenance or {}).get(key)
+        candidates.append((key, answer, question.part_score(answer), question.weight))
     if land is not None:
         candidates.append((LAND_TENURE_PART, land_tenure, land.part_score(land_tenure), land.weight))
 
@@ -158,9 +196,9 @@ def compute_score(values: dict[str, float | None], rules: "RiskRules", land_tenu
     weight_share = present_weight / total_weight if total_weight else 0.0
 
     key_figures = sum(1 for part in parts if part.metric_key in score_rules.weights)
-    # The minimum is about enough current data: it counts the key figures and the land tenure, not the trends, so a
-    # missing history (e.g. only one report uploaded) adds nothing but never blocks a score.
-    core = [c for c in candidates if not c[0].startswith(TREND_PREFIX)]
+    # The minimum is about enough current data: it counts the key figures and the land tenure, not the trends or the
+    # maintenance answers, so a missing history or an unanswered question adds nothing but never blocks a score.
+    core = [c for c in candidates if not c[0].startswith((TREND_PREFIX, MAINTENANCE_PREFIX))]
     core_total = sum(weight for *_, weight in core)
     core_share = sum(weight for _, _, score, weight in core if score is not None) / core_total if core_total else 0.0
     enough = key_figures >= score_rules.min_key_figures and core_share >= score_rules.min_weight_share - 1e-9
@@ -193,7 +231,15 @@ def load_score_rules(raw: dict, indicator_keys: set[str]) -> ScoreRules:
         if trend.measure not in TREND_MEASURES or trend.years < 2 or trend.weight <= 0 or trend.best == trend.worst:
             raise ValueError(f"Invalid score trend for {metric_key}")
         trends[trend.key] = trend
-    return ScoreRules(weights, int(raw["min_key_figures"]), float(raw["min_weight_share"]), land, trends)
+    maintenance = {}
+    for name, settings in raw.get("maintenance", {}).items():
+        question = MaintenanceRule(name, settings["label"], settings["topic"], settings["question"],
+                                   float(settings["yes"]), float(settings["no"]), float(settings["weight"]),
+                                   settings["reason"])
+        if question.weight <= 0:
+            raise ValueError(f"Score weight for maintenance question {name} must be positive")
+        maintenance[question.key] = question
+    return ScoreRules(weights, int(raw["min_key_figures"]), float(raw["min_weight_share"]), land, trends, maintenance)
 
 
 def _number(value: float) -> str:

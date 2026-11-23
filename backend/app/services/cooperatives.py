@@ -17,11 +17,11 @@ from app.domain.metrics import METRICS
 from app.domain.provenance import ExtractionMethod, ValueOrigin, VerificationStatus
 from app.domain.resolution import Observation, ResolvedValue, resolve
 from app.domain.risk import CONCERN_LABELS, ConcernLevel, RiskRules
-from app.domain.score import LAND_TENURE_PART, TrendRule, compute_score
-from app.models import FinancialObservation, HousingCooperative, SourceDocument
+from app.domain.score import LAND_TENURE_PART, MaintenanceRule, TrendRule, compute_score
+from app.models import FinancialObservation, HousingCooperative, MaintenanceAnswer, SourceDocument
 from app.schemas import (
     CalculatedValue, Completeness, CooperativeInfo, CooperativeListItem, CooperativeOverview, CooperativeScore,
-    DocumentSummary, Finding, MetricSeries, ReportedValue, RiskAssessment, RiskIndicator, ScoreMissingPart,
+    DocumentSummary, Finding, MaintenanceQuestion, MetricSeries, ReportedValue, RiskAssessment, RiskIndicator, ScoreMissingPart,
     ScorePart, SourceRef, TrendInput, YearValue,
 )
 
@@ -84,16 +84,23 @@ def score_label(score: CooperativeScore | None) -> str | None:
 
 
 def coverage_text(assessed: int, total: int, core_weight_share: float, land_tenure_known: bool = False,
-                  trends: tuple[int, int] = (0, 0)) -> str:
-    """"Baserat på 4 av 6 nyckeltal och marken (77 % av vikten) och 2 av 2 trender." Built here only.
+                  trends: tuple[int, int] = (0, 0), maintenance: tuple[int, int] = (0, 0)) -> str:
+    """"Baserat på 4 av 6 nyckeltal och marken (77 % av vikten), 2 av 2 trender och 1 av 3 underhållssvar."
 
-    The percentage is the share the minimum coverage uses (key figures and land tenure), so a score shown next to
-    it never seems to contradict the rule; the trends are listed after it, as they never decide whether there is one.
+    Built here only. The percentage is the share the minimum coverage uses (key figures and land tenure), so a
+    score shown next to it never seems to contradict the rule; trends and maintenance answers are listed after it,
+    as they never decide whether there is a score.
     """
     share = math.floor(core_weight_share * 100 + 0.5)
     core = f"{assessed} av {total} nyckeltal" + (" och marken" if land_tenure_known else "")
-    trend_text = f" och {trends[0]} av {trends[1]} trender" if trends[1] else ""
-    return f"Baserat på {core} ({share} % av vikten){trend_text}."
+    extras = [f"{trends[0]} av {trends[1]} trender"] if trends[1] else []
+    extras += [f"{maintenance[0]} av {maintenance[1]} underhållssvar"] if maintenance[1] else []
+    extra_text = ""
+    if len(extras) == 1:
+        extra_text = f" och {extras[0]}"
+    elif extras:
+        extra_text = ", " + ", ".join(extras[:-1]) + f" och {extras[-1]}"
+    return f"Baserat på {core} ({share} % av vikten){extra_text}."
 
 
 def build_overview(cooperative: HousingCooperative, rules: RiskRules) -> CooperativeOverview:
@@ -117,6 +124,7 @@ def build_overview(cooperative: HousingCooperative, rules: RiskRules) -> Coopera
         metrics=metrics,
         risk=_assess_risk(cooperative, metrics, latest_year, rules),
         score=_score(cooperative, metrics, latest_year, rules),
+        maintenance=maintenance_questions(cooperative, rules),
         completeness=_completeness(metrics, latest_year),
         documents=[DocumentSummary.model_validate(d) for d in
                    sorted(cooperative.documents, key=lambda d: (d.reporting_year or 0, d.id), reverse=True)],
@@ -261,14 +269,18 @@ def _score(cooperative: HousingCooperative, metrics: list[MetricSeries], year: i
     usable = {key: v.display_value if v and v.display_status != VerificationStatus.CONFLICTING.value else None
               for key, v in year_values.items()}
     trends = {key: _trend_years(metrics, trend, year) for key, trend in rules.score.trends.items()}
+    answers = {f"maintenance:{a.name}": a for a in cooperative.maintenance_answers}
     result = compute_score(usable, rules, land_tenure=cooperative.land_tenure,
-                           trends={key: info.change for key, info in trends.items()})
+                           trends={key: info.change for key, info in trends.items()},
+                           maintenance={key: a.answer for key, a in answers.items()})
     parts = []
     for part in result.parts:
         if part.metric_key == LAND_TENURE_PART:
             parts.append(_land_tenure_part(cooperative, part, rules))
         elif part.metric_key in trends:
             parts.append(_trend_part(rules.score.trends[part.metric_key], trends[part.metric_key], part, year))
+        elif part.metric_key in rules.score.maintenance:
+            parts.append(_maintenance_part(rules.score.maintenance[part.metric_key], answers[part.metric_key], part))
         else:
             parts.append(ScorePart(
                 key=part.metric_key, label=METRICS[part.metric_key].label, value=part.value, value_text=None,
@@ -286,11 +298,17 @@ def _score(cooperative: HousingCooperative, metrics: list[MetricSeries], year: i
         elif key in trends:
             missing.append(ScoreMissingPart(key=key, label=_trend_label(rules.score.trends[key]),
                                             reason=trends[key].reason))
+        elif key in rules.score.maintenance:
+            given = answers.get(key)
+            missing.append(ScoreMissingPart(
+                key=key, label=_maintenance_label(rules.score.maintenance[key]),
+                reason="Besvarat med Vet inte." if given and given.answer == "unknown" else "Inte besvarat."))
         else:
             missing.append(ScoreMissingPart(key=key, label=METRICS[key].label,
                                             reason=_missing_part_reason(year_values[key], year)))
     key_figures = sum(1 for part in parts if part.key in rules.score.weights)
     trends_present = sum(1 for part in parts if part.key in trends)
+    answered = sum(1 for part in parts if part.key in rules.score.maintenance)
     insufficient = CONCERN_LABELS[ConcernLevel.INSUFFICIENT_INFORMATION]
     return CooperativeScore(
         score=result.score, label=None if result.score is not None else insufficient,
@@ -299,7 +317,8 @@ def _score(cooperative: HousingCooperative, metrics: list[MetricSeries], year: i
         coverage=coverage_text(key_figures, len(rules.score.weights), result.core_weight_share,
                                land_tenure_known=LAND_TENURE_PART not in result.missing
                                and rules.score.land_tenure is not None,
-                               trends=(trends_present, len(trends))),
+                               trends=(trends_present, len(trends)),
+                               maintenance=(answered, len(rules.score.maintenance))),
         parts=parts, missing=missing,
     )
 
@@ -357,6 +376,44 @@ def _trend_part(trend: TrendRule, info: _TrendYears, part, year: int) -> ScorePa
         rule=trend.describe(shown_unit), part_score=part.part_score, weight=part.weight,
         weight_reason=trend.reason, effective_weight=part.effective_weight,
     )
+
+
+def _maintenance_label(question: MaintenanceRule) -> str:
+    return f"{question.label}, kommande"
+
+
+def _maintenance_part(question: MaintenanceRule, given: MaintenanceAnswer, part) -> ScorePart:
+    """A maintenance answer as a part: the user's own answer is the only source."""
+    return ScorePart(
+        key=question.key, label=_maintenance_label(question), value=None,
+        value_text={"yes": "Ja", "no": "Nej"}[given.answer], unit=None, fiscal_year=None,
+        status=VerificationStatus.USER_ENTERED.value, sources=[],
+        source_text=f"Angivet av dig ({given.answered_at:%Y-%m-%d}).", formula=None, rule=question.describe(),
+        part_score=part.part_score, weight=part.weight, weight_reason=question.reason,
+        effective_weight=part.effective_weight,
+    )
+
+
+def maintenance_questions(cooperative: HousingCooperative, rules: RiskRules) -> list[MaintenanceQuestion]:
+    if rules.score is None:
+        return []
+    answers = {a.name: a for a in cooperative.maintenance_answers}
+    return [
+        MaintenanceQuestion(name=q.name, label=q.label, topic=q.topic, question=q.question,
+                            answer=answers[q.name].answer if q.name in answers else None,
+                            answered_at=answers[q.name].answered_at if q.name in answers else None)
+        for q in rules.score.maintenance.values()
+    ]
+
+
+def answer_maintenance(session: Session, cooperative: HousingCooperative, name: str, answer: str) -> None:
+    """Save the user's answer; an existing answer is replaced."""
+    existing = next((a for a in cooperative.maintenance_answers if a.name == name), None)
+    if existing:
+        existing.answer = answer
+    else:
+        cooperative.maintenance_answers.append(MaintenanceAnswer(name=name, answer=answer))
+    session.commit()
 
 
 LAND_TENURE_TEXT = {"owned": "Äganderätt", "leasehold": "Tomträtt"}

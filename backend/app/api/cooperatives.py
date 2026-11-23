@@ -11,7 +11,8 @@ from app.domain.provenance import ExtractionMethod, VerificationStatus
 from app.domain.risk import RiskRules
 from app.models import FinancialObservation, HousingCooperative
 from app.schemas import (
-    CooperativeListItem, CooperativeOverview, CooperativeUpdate, ManualObservationCreate, MetricDefinitionOut,
+    CooperativeListItem, CooperativeOverview, CooperativeUpdate, MaintenanceAnswerIn, ManualObservationCreate,
+    MetricDefinitionOut,
 )
 from app.services import cooperatives as cooperative_service
 from app.services import documents as document_service
@@ -124,6 +125,17 @@ def delete_manual_observation(observation_id: int, session: SessionDep, rules: R
     cooperative_id = observation.cooperative_id
     session.delete(observation)
     session.commit()
+    return cooperative_service.build_overview(_load(session, cooperative_id), rules)
+
+
+@router.put("/cooperatives/{cooperative_id}/maintenance/{name}", response_model=CooperativeOverview)
+def answer_maintenance(cooperative_id: int, name: str, request: MaintenanceAnswerIn, session: SessionDep,
+                       rules: RulesDep):
+    """The user's answer to a maintenance question. Only the user answers these; extraction never does."""
+    cooperative = _load(session, cooperative_id)
+    if rules.score is None or f"maintenance:{name}" not in rules.score.maintenance:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Okänd underhållsfråga.")
+    cooperative_service.answer_maintenance(session, cooperative, name, request.answer)
     return cooperative_service.build_overview(_load(session, cooperative_id), rules)
 
 

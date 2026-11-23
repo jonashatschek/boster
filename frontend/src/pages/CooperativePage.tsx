@@ -13,6 +13,7 @@ import {
 import { ConcernBadge } from '../components/Badges'
 import { DocumentLink } from '../components/DocumentLink'
 import { DocumentUploader } from '../components/DocumentUploader'
+import { MaintenanceQuestions } from '../components/MaintenanceQuestions'
 import { MetricChart } from '../components/MetricChart'
 import { ScoreCard } from '../components/ScoreCard'
 import { ValueDetails } from '../components/ValueDetails'
@@ -140,6 +141,8 @@ export function CooperativePage() {
           ))}
         </div>
       </section>
+
+      {overview.maintenance.length > 0 && <MaintenanceQuestions overview={overview} onChange={setOverview} />}
 
       {charts.length > 0 && (
         <section className="stack">
